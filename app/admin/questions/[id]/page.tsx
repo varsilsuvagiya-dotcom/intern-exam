@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/db";
+import { VALID_SECTIONS } from "@/lib/question-bank/csv-contract";
 
 import { QuestionEditor } from "./question-editor";
 
@@ -36,6 +37,7 @@ export default async function QuestionDetailPage({
       </p>
 
       <QuestionEditor
+        sections={VALID_SECTIONS}
         question={{
           id: question.id,
           section: question.section,

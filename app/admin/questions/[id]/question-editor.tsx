@@ -49,7 +49,13 @@ function Field({
   );
 }
 
-export function QuestionEditor({ question }: { question: EditableQuestion }) {
+export function QuestionEditor({
+  question,
+  sections,
+}: {
+  question: EditableQuestion;
+  sections: readonly number[];
+}) {
   const [state, save, saving] = useActionState<EditState, FormData>(saveQuestion, { status: "idle" });
   const [activeState, changeActive, changingActive] = useActionState<EditState, FormData>(
     toggleActive,
@@ -79,7 +85,7 @@ export function QuestionEditor({ question }: { question: EditableQuestion }) {
         <div className="grid grid-cols-3 gap-4">
           <Field label="Section" error={errorFor("section")}>
             <select name="section" defaultValue={String(question.section)} className={FIELD}>
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((section) => (
+              {sections.map((section) => (
                 <option key={section} value={section}>
                   {section}
                 </option>

@@ -44,6 +44,25 @@ async function main(): Promise<void> {
 
     const created = admin.createdAt.getTime() === admin.updatedAt.getTime();
     console.log(`Admin ${created ? "created" : "updated"}: ${admin.email}`);
+
+    // Created only when absent, never updated. Re-seeding must not reset an
+    // exam an administrator has configured — least of all reopening or closing
+    // it underneath them.
+    const existing = await prisma.examSetting.findUnique({ where: { id: "singleton" } });
+
+    if (existing) {
+      console.log("Exam settings already present; left unchanged.");
+    } else {
+      await prisma.examSetting.create({
+        data: {
+          id: "singleton",
+          examName: "CloudUS Online Exam",
+          durationMinutes: 75,
+          isOpen: false,
+        },
+      });
+      console.log("Exam settings created: 75 minutes, closed.");
+    }
   } finally {
     await prisma.$disconnect();
   }

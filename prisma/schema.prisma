@@ -170,6 +170,26 @@ model Answer {
   @@map("answers")
 }
 
+/// Exam configuration the admin can change at runtime. The fixed shape of the
+/// paper — section names, question counts and marks — is a domain rule and
+/// lives in lib/exam-settings/exam-blueprint.ts instead.
+///
+/// Exactly one row exists. `id` is pinned to a known value and a check
+/// constraint in the migration rejects any other, so a second configuration
+/// cannot be created even by accident.
+model ExamSetting {
+  id              String   @id @default("singleton")
+  examName        String   @map("exam_name")
+  durationMinutes Int      @map("duration_minutes")
+  /// Closed by default so a fresh deployment can never accidentally admit
+  /// candidates before an admin opens the exam.
+  isOpen          Boolean  @default(false) @map("is_open")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("exam_settings")
+}
+
 model Admin {
   id           String   @id @default(uuid())
   email        String   @unique

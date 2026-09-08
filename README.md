@@ -101,6 +101,68 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Exam settings
+
+Admins configure the exam at `/admin/settings`. Both viewing and saving require
+a signed-in admin and are checked on the server.
+
+### Editable
+
+| Setting | Default | Rules |
+| --- | --- | --- |
+| Exam name | `CloudUS Online Exam` | Required, trimmed, ≤120 characters |
+| Duration | `75` minutes | Whole number, 1–1440 |
+| Exam status | **Closed** | `open` or `closed` only |
+
+**The exam ships closed.** A fresh deployment must never admit candidates before
+an admin deliberately opens it, so `false` is the database default, the seeded
+value, and what the migration inserts.
+
+### Deliberately fixed
+
+Section names, question counts, marks per question and scored flags are **not**
+admin-editable. They live in `lib/exam-settings/exam-blueprint.ts` and are shown
+read-only on the settings page.
+
+This is a deliberate decision. The paper is 55 questions worth 70 marks by
+specification, and scoring and paper generation are built on those numbers. An
+admin who set section 4 to 9 questions would not have configured a different
+exam, they would have broken this one — and since the only value that could pass
+validation is the specified one, an editable field would be a control with
+exactly one legal setting. If the specification itself changes, the blueprint is
+the single place to change it.
+
+The blueprint also records that section 7 is drawn as 2 lesson groups of 3
+questions, which paper generation will consume in a later phase.
+
+### Reading settings from server code
+
+```ts
+import { getExamSettings, isExamOpen } from "@/lib/exam-settings";
+```
+
+Later phases should go through these rather than querying the table directly.
+Reads are intentionally **not cached**: the open/closed flag gates candidate
+access, and a stale `true` after an admin closes the exam would let candidates
+in. It is a single primary-key lookup.
+
+### Seeding
+
+`npm run db:seed` creates the settings row **only if it is missing**. It never
+overwrites an existing configuration, so re-running a seed in production cannot
+reset an exam an administrator has already set up — or silently reopen it.
+
+The row is also inserted by the migration (`ON CONFLICT DO NOTHING`), so a
+migrated database always has valid settings.
+
+### Singleton guarantee
+
+There is exactly one configuration row, enforced in PostgreSQL rather than by
+convention: the primary key is pinned by a check constraint
+(`exam_settings_singleton_check`), so inserting a second row fails. A second
+check constraint rejects a duration outside 1–1440 even if something bypassed
+the application.
+
 ## Question bank management
 
 Admins browse and edit the question bank at `/admin/questions`. Every page and

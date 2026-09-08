@@ -30,6 +30,12 @@ export default async function AdminPage() {
           >
             Import CSV
           </Link>
+          <Link
+            href="/admin/settings"
+            className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+          >
+            Exam settings
+          </Link>
         </div>
         <form action={logout} className="mt-4">
           <button
