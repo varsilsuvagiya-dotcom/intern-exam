@@ -17,12 +17,20 @@ export default async function AdminPage() {
         <p className="mt-2 text-sm text-black/60 dark:text-white/60">
           You are signed in as {admin.email}.
         </p>
-        <Link
-          href="/admin/questions/import"
-          className="mt-6 inline-block rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-        >
-          Import question bank
-        </Link>
+        <div className="mt-6 flex justify-center gap-3">
+          <Link
+            href="/admin/questions"
+            className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+          >
+            Question bank
+          </Link>
+          <Link
+            href="/admin/questions/import"
+            className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+          >
+            Import CSV
+          </Link>
+        </div>
         <form action={logout} className="mt-4">
           <button
             type="submit"
@@ -35,3 +43,4 @@ export default async function AdminPage() {
     </main>
   );
 }
+

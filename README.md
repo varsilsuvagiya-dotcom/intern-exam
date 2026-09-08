@@ -101,6 +101,59 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Question bank management
+
+Admins browse and edit the question bank at `/admin/questions`. Every page and
+action requires a signed-in admin session and is checked on the server; hiding
+a button is never the protection.
+
+### List, search and filters
+
+The list is paginated in the database (25 per page by default, with 50 and 100
+available) and shows ID, section, topic, question, lesson group, difficulty,
+marks, scored, status and active state.
+
+Search matches question **ID**, **question text** or **topic**,
+case-insensitively. Filters cover section, difficulty, status, active/inactive
+and scored/unscored, and combine with search and pagination.
+
+All of it lives in the URL — `/admin/questions?search=array&section=3&page=2` —
+so a filtered view can be refreshed, bookmarked or shared. Unrecognised query
+values (`page=abc`, `section=999`) fall back to the default rather than
+erroring.
+
+### Editing
+
+`/admin/questions/[id]` shows the full record and allows editing every field
+except the ID. **The question ID is permanent** — historical attempts and CSV
+re-imports both key off it, so it is shown read-only and the server never writes
+it.
+
+Validation runs on the server and rejects the whole save if anything fails —
+nothing is partially written. The rules are the same domain rules the CSV
+importer applies (`lib/question-bank/question-rules.ts`): marks must fit
+`Decimal(4,2)`, section 7 questions need their lesson text and group, section 8
+must be unscored, and marks must agree with `scored`.
+
+### Status vs active
+
+These are separate concepts and both are preserved:
+
+- `status` (`draft` / `review` / `ready`) tracks how far a question has been
+  through preparation.
+- `isActive` controls whether it is eligible for future exam selection.
+
+**Deactivating never deletes.** The row, its data and every historical reference
+stay exactly where they are; only the flag changes, and it can be reversed. A
+confirmation step explains this before the change is applied. Phase 5 provides
+no question-deletion operation at all.
+
+### Historical safety
+
+Editing or deactivating a question does **not** touch historical attempts. Each
+drawn paper stores its own snapshot, so a submitted attempt still shows the
+wording, options, correct answer and marks the candidate actually saw.
+
 ## Question bank import
 
 Admins upload the question bank as a CSV at `/admin/questions/import`. The file

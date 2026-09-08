@@ -8,20 +8,17 @@ import {
   BOOLEAN_VALUES,
   CSV_COLUMNS,
   DIFFICULTY_VALUES,
-  LESSON_SECTION,
-  MARKS_DECIMAL_PLACES,
-  MARKS_MAX,
   MAX_FILE_BYTES,
   MAX_ID_LENGTH,
   MAX_TOPIC_LENGTH,
   OPTIONAL_COLUMNS,
   OPTION_VALUES,
   STATUS_VALUES,
-  UNSCORED_SECTION,
   VALID_SECTIONS,
   describeAccepted,
   type CsvColumn,
 } from "./csv-contract";
+import { validateMarks, validateQuestionRules } from "./question-rules";
 
 export type QuestionRow = {
   id: string;
@@ -78,24 +75,14 @@ function parseBoolean(raw: string): boolean | null {
   return BOOLEAN_VALUES[raw.toLowerCase()] ?? null;
 }
 
-/// Rejects anything that is not a plain non-negative decimal within the
-/// Decimal(4,2) column, rather than rounding it to fit.
-function parseMarks(raw: string): { value: string } | { error: string } {
-  if (!/^\d+(\.\d+)?$/.test(raw)) {
-    return { error: `marks must be a non-negative number, received "${raw}"` };
-  }
-
-  const decimals = raw.split(".")[1]?.length ?? 0;
-  if (decimals > MARKS_DECIMAL_PLACES) {
-    return { error: `marks supports at most ${MARKS_DECIMAL_PLACES} decimal places, received "${raw}"` };
-  }
-
-  if (Number(raw) > MARKS_MAX) {
-    return { error: `marks must not exceed ${MARKS_MAX}, received "${raw}"` };
-  }
-
-  return { value: raw };
-}
+/// Maps a domain rule's field name back to the CSV column it came from, so
+/// errors stay in the spreadsheet's vocabulary.
+const RULE_FIELD_TO_COLUMN: Record<string, CsvColumn> = {
+  lessonText: "lesson_text",
+  lessonGroup: "lesson_group",
+  scored: "scored",
+  marks: "marks",
+};
 
 function validateRow(
   record: Record<string, string>,
@@ -167,42 +154,27 @@ function validateRow(
     fail("trainer_verified", `trainer_verified must be one of ${describeAccepted(BOOLEAN_VALUES)}, received "${read("trainer_verified")}"`);
   }
 
-  const marksResult = parseMarks(read("marks"));
-  if ("error" in marksResult) {
-    fail("marks", marksResult.error);
+  const marks = read("marks");
+  const marksError = validateMarks(marks);
+  if (marksError) {
+    fail("marks", marksError);
   }
 
-  if (errors.length > before || "error" in marksResult) {
+  if (errors.length > before) {
     return null;
   }
-
-  const marks = marksResult.value;
 
   const lessonText = read("lesson_text") || null;
   const lessonGroup = read("lesson_group") || null;
 
-  // Cross-field rules, taken from the requirements: section 7 is drawn as whole
-  // lessons so both lesson columns must be present, and section 8 is stored but
-  // never scored.
-  if (section === LESSON_SECTION) {
-    if (!lessonGroup) {
-      fail("lesson_group", `section ${LESSON_SECTION} questions must have a lesson_group`);
-    }
-    if (!lessonText) {
-      fail("lesson_text", `section ${LESSON_SECTION} questions must have lesson_text`);
-    }
-  }
-
-  if (section === UNSCORED_SECTION && scored) {
-    fail("scored", `section ${UNSCORED_SECTION} questions are not scored, so scored must be false`);
-  }
-
-  if (scored === false && Number(marks) !== 0) {
-    fail("marks", `unscored questions must have marks of 0, received "${marks}"`);
-  }
-
-  if (scored === true && Number(marks) === 0) {
-    fail("marks", "scored questions must have marks greater than 0");
+  for (const ruleError of validateQuestionRules({
+    section,
+    scored: scored as boolean,
+    marks,
+    lessonText,
+    lessonGroup,
+  })) {
+    fail(RULE_FIELD_TO_COLUMN[ruleError.field] ?? "id", ruleError.message);
   }
 
   if (errors.length > before) {
