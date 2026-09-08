@@ -101,6 +101,75 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Question bank import
+
+Admins upload the question bank as a CSV at `/admin/questions/import`. The file
+is parsed and validated, a preview is shown, and **nothing is written until the
+admin confirms**.
+
+> **The production question-bank file has not been provided yet.** The column
+> list below is the *current* contract, taken from the requirements document,
+> and is expected to be revised once the real spreadsheet arrives. When that
+> happens, `lib/question-bank/csv-contract.ts` is the single file to update —
+> column names, required/optional status, accepted enum and boolean spellings,
+> numeric limits, and the cross-field rules all live there.
+
+### Current columns
+
+```
+id, section, topic, difficulty, question, code_block,
+option_a, option_b, option_c, option_d, correct, explanation,
+lesson_text, lesson_group, scored, marks,
+ai_verified, trainer_verified, status
+```
+
+All 19 must be present. A missing column or an unrecognised extra column is a
+validation error — headers are matched exactly, so `Question` or `question_text`
+will not be accepted in place of `question`.
+
+`code_block`, `explanation`, `lesson_text` and `lesson_group` may be blank and
+are stored as `NULL`. Every other column is required.
+
+### Validation
+
+Validation runs over the whole file before any write. If anything fails, the
+import is refused in full and **no rows are written** — invalid rows are never
+skipped silently.
+
+- **Enums** — `difficulty` (easy/medium/hard), `correct` (a/b/c/d), `status`
+  (draft/review/ready) and `section` (1–8) are matched case-insensitively
+  against the allowed values. Unknown values are rejected, never defaulted.
+- **Booleans** — `scored`, `ai_verified` and `trainer_verified` accept
+  `true`/`false`, `1`/`0`, `yes`/`no`. Anything else is an error.
+- **Marks** — a non-negative decimal with at most 2 decimal places and a maximum
+  of 99.99, matching the `Decimal(4,2)` column. Out-of-range values are rejected
+  rather than rounded.
+- **Duplicate ids** — two rows sharing an `id` are rejected, naming both rows.
+- **Cross-field** — section 7 questions must carry `lesson_text` and
+  `lesson_group`, since papers draw whole lessons; section 8 must be unscored;
+  unscored questions must have 0 marks and scored questions more than 0.
+
+Errors are reported per row as `Row 14: correct — invalid value "E"`.
+
+### Import behavior
+
+`id` is the stable identifier from the CSV and is never regenerated. A row whose
+id is new creates a question; an existing id updates it in place. The whole
+batch runs inside one transaction, so a failure part way through rolls back and
+leaves the bank untouched. Re-importing the same file is safe: it updates rather
+than duplicating.
+
+Updating a question **does not touch historical attempts**. Each drawn paper
+carries its own snapshot of the question, so a submitted attempt still shows the
+wording, options, correct answer and marks the candidate actually saw.
+
+### Current limitations
+
+- CSV only. No Excel or Google Sheets import.
+- Whole-file validation: one bad row blocks the entire import by design.
+- The preview table shows the first 200 rows; all rows are still imported.
+- Uploads are limited to 5 MB.
+
 ## Candidate synchronization
 
 Candidates apply through a Google Form. Their record must already exist in

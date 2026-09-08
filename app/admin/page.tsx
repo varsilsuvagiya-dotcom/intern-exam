@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 
@@ -16,7 +17,13 @@ export default async function AdminPage() {
         <p className="mt-2 text-sm text-black/60 dark:text-white/60">
           You are signed in as {admin.email}.
         </p>
-        <form action={logout} className="mt-6">
+        <Link
+          href="/admin/questions/import"
+          className="mt-6 inline-block rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
+        >
+          Import question bank
+        </Link>
+        <form action={logout} className="mt-4">
           <button
             type="submit"
             className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
