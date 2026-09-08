@@ -1,0 +1,12 @@
+// CloudUS — Prisma schema
+// Phase 0: connection configuration only. Business models arrive in later phases.
+// Connection URLs live in prisma7.config.ts (Prisma 7 requirement).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

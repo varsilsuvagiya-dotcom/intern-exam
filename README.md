@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CloudUS
 
-## Getting Started
+CloudUS is an online examination system used to assess fresher candidates during hiring.
+Candidates take the exam on supervised office machines; results are produced automatically
+for the hiring team.
 
-First, run the development server:
+This repository currently contains **Phase 0** only: the project foundation.
+No exam, admin, or candidate functionality has been implemented yet.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Technology stack
+
+| Layer | Choice |
+| --- | --- |
+| Framework | Next.js (App Router) |
+| Language | TypeScript (strict) |
+| Styling | Tailwind CSS |
+| ORM | Prisma |
+| Database | PostgreSQL, hosted on Supabase |
+| Linting | ESLint |
+
+Supabase is used **only** as a managed PostgreSQL host. Supabase Auth, Storage, Realtime,
+and Edge Functions are not used. All database access goes through Prisma from the Next.js
+server runtime.
+
+```
+Next.js  →  Prisma  →  PostgreSQL (Supabase)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Frontend and backend live in this single Next.js application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Requirements
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Node.js 20 or newer
+- npm
+- A PostgreSQL database (Supabase project)
 
-## Learn More
+## Local setup
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+cp .env.example .env   # then fill in the values
+npx prisma generate
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The development server runs at http://localhost:3000.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Environment variables
 
-## Deploy on Vercel
+Copy `.env.example` to `.env` and provide values. Every variable is server-only —
+none may be prefixed with `NEXT_PUBLIC_`, and `.env` is git-ignored.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Pooled Supabase PostgreSQL connection used at runtime |
+| `DIRECT_URL` | Direct Supabase PostgreSQL connection used by Prisma migrations |
+| `ADMIN_EMAIL` | Admin panel account, consumed from Phase 1 onward |
+| `ADMIN_PASSWORD` | Admin panel password, consumed from Phase 1 onward |
+| `GOOGLE_APPS_SCRIPT_SECRET` | Shared secret for the candidate sync integration |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Prisma
+
+The schema lives in `prisma/schema.prisma`. Under Prisma 7 the connection URLs are
+configured in `prisma7.config.ts` rather than in the schema itself.
+
+```bash
+npx prisma generate   # regenerate the client into lib/generated/prisma
+```
+
+The generated client is git-ignored and is regenerated automatically on `npm install`.
+The shared client instance is exported from `lib/db`.
+
+No business models are defined yet; they arrive in later phases.
+
+## Scripts
+
+```bash
+npm run dev          # start the development server
+npm run build        # production build
+npm run lint         # ESLint
+npm run type-check   # TypeScript, no emit
+```
+
+## Project structure
+
+```
+app/          routes, layout, error and loading boundaries
+components/   shared React components
+lib/db/       Prisma client singleton
+prisma/       Prisma schema
+public/       static assets
+types/        shared TypeScript types
+```
+
+## Planned
+
+Later phases will add the admin panel and authentication, the question bank with CSV
+import, exam settings, randomized paper generation, the candidate exam experience with a
+server-side timer and auto-save, resume after interruption, automatic submission and
+scoring, results and CSV export, the Google Form candidate sync, and deployment through
+AWS Amplify.
