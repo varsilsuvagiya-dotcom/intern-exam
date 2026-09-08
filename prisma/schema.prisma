@@ -111,6 +111,7 @@ model Attempt {
   candidate        Candidate         @relation(fields: [candidateId], references: [id], onDelete: Restrict)
   attemptQuestions AttemptQuestion[]
   answers          Answer[]
+  examSessions     ExamSession[]
 
   // "One active attempt per candidate" is a partial unique index on
   // (candidate_id) WHERE status = 'in_progress'. Prisma's schema syntax has no
@@ -204,6 +205,26 @@ model ExamSetting {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@map("exam_settings")
+}
+
+/// Ties a browser to one attempt for the duration of an exam sitting.
+///
+/// Candidates have no accounts, so this is not authentication: it is a capability
+/// scoped to a single attempt, issued by the server when eligibility has already
+/// been proven. As with admin sessions the cookie carries a random opaque token
+/// and only its SHA-256 hash is stored, so a database dump cannot be replayed.
+model ExamSession {
+  id        String   @id @default(uuid())
+  attemptId String   @map("attempt_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@index([expiresAt])
+  @@map("exam_sessions")
 }
 
 model Admin {

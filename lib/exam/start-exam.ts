@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getExamSettings } from "@/lib/exam-settings";
 import { normalizeMobile } from "@/lib/integrations/candidate-payload";
 
+import { createExamSession } from "./exam-session";
 import { ensureExamPaper } from "./paper-generation";
 
 const MAX_NAME = 200;
@@ -45,6 +46,11 @@ async function withPaper(attemptId: string, resumed: boolean): Promise<StartOutc
     });
     return { kind: "failed" };
   }
+
+  // Issued only now, once eligibility and the paper are both settled. The cookie
+  // is what lets /exam identify this candidate's attempt without the browser
+  // ever naming one.
+  await createExamSession(attemptId);
 
   return { kind: "started", resumed };
 }

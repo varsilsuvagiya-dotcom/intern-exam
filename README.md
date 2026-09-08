@@ -105,6 +105,66 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Candidate exam interface
+
+The exam itself is at `/exam`, reached from the start page once eligibility has
+been proven and the paper generated.
+
+### Exam session
+
+Candidates have no accounts, so the exam screen identifies the attempt through
+a short-lived session cookie rather than anything the browser names. Starting an
+exam issues `cloudus_exam_session` — httpOnly, SameSite=Lax, `Secure` in
+production — holding a random 256-bit opaque token whose SHA-256 hash is the
+only thing stored, in `exam_sessions`. **The attempt id is never accepted from
+the request**, so there is no URL or cookie edit that reaches another
+candidate's exam. A missing, forged or expired cookie redirects to the start
+page. Sessions are deliberately separate from admin sessions: a candidate is a
+temporary exam participant, not a user.
+
+### What the browser receives
+
+The server maps the stored paper into a candidate-safe shape and names every
+field explicitly rather than spreading the database row. **`correct` and
+`explanation` are never sent** — not in the payload, not in the rendered HTML.
+Each question carries only its id, position, section and section name, question
+text, code block, the options in display order, lesson text and group, marks,
+and whether it is free-text.
+
+### Rendering
+
+One question at a time, from the persisted snapshot — the question bank is never
+read. Options appear in the order stored in `shuffledOptionOrder`, and each
+keeps its **original key**, so selecting the first displayed option records `c`
+if C is displayed first. Nothing is shuffled at render time, so navigating away
+and back, or refreshing, shows the same order.
+
+Code blocks render in a monospace block preserving whitespace and scrolling
+horizontally when needed. Nothing is treated as markup.
+
+Section 7 shows its lesson in a distinct panel above the question; all three
+questions of a group show the same lesson. Section 8 renders a textarea instead
+of options, noting there is no right or wrong answer.
+
+### Navigation and question states
+
+Previous/Next move one question and are disabled at the ends. The 55-button grid
+jumps anywhere. Each button is **answered** (filled), **visited but unanswered**
+(outlined), or **not visited** (greyed), with the current question additionally
+ring-highlighted — states differ in weight and border as well as colour, and
+each button carries an accessible label naming its state. A legend explains
+them. Navigation is entirely client-side and writes nothing to the database.
+
+### Not yet built
+
+- **Answers are not saved.** Selections live in browser state only and are lost
+  on refresh. The *paper* survives refresh; the answers do not. The UI says so
+  rather than implying otherwise.
+- **The timer is a placeholder.** It shows the configured duration and does not
+  count down. Authoritative timing from `startedAt + durationMinutes`, and
+  enforcement, come later.
+- **Submit is disabled.** No submission, auto-submit or scoring exists yet.
+
 ## Paper generation
 
 Each attempt gets its own randomly drawn paper of 55 questions worth 70 marks.

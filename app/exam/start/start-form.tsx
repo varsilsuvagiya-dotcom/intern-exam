@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { startExam, type StartState } from "./actions";
@@ -25,9 +26,12 @@ export function StartForm() {
             ? "Your exam is already in progress and will continue where you left off."
             : "Your exam has been started."}
         </p>
-        <p className="mt-3 text-black/50 dark:text-white/50">
-          The exam screen is not available yet.
-        </p>
+        <Link
+          href="/exam"
+          className="mt-4 inline-block rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+        >
+          {state.resumed ? "Continue exam" : "Open exam"}
+        </Link>
       </div>
     );
   }
