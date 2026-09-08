@@ -99,6 +99,12 @@ model Attempt {
   durationSeconds Int?          @map("duration_seconds")
   totalScore      Decimal?      @map("total_score") @db.Decimal(5, 2)
   status          AttemptStatus @default(in_progress)
+  /// What the candidate typed on the start screen. Recorded here rather than
+  /// written back to Candidate, because the Google Form record is the
+  /// authoritative application data; keeping both lets an admin spot a
+  /// candidate who entered a different name or email than they applied with.
+  enteredName     String?       @map("entered_name")
+  enteredEmail    String?       @map("entered_email")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 

@@ -101,6 +101,72 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Candidate start
+
+Candidates begin at `/exam/start` by entering their full name, email and mobile
+number. All three are required and all three are re-validated on the server.
+
+### Eligibility
+
+**The mobile number is the eligibility key.** It is normalized and looked up in
+the `candidates` table — the records synchronized from the Google Form. Name and
+email are never used to find the candidate, and Google Sheets is never queried
+at exam time; PostgreSQL is the source of truth.
+
+An unrecognised number gets: *"Please enter the same mobile number you used in
+the application form."* A malformed number gets the same message, so the
+response never reveals whether a number exists. There is no endpoint that
+returns candidates or accepts a mobile lookup.
+
+Normalization is the Phase 3 helper, unchanged and shared rather than copied, so
+`98765 00011`, `98765-00011`, `+91 9876500011`, `919876500011`, `09876500011`
+and `(98765) 00011` all resolve to the same candidate.
+
+### Exam open/closed
+
+Reading the settings when the page renders is not enough — an admin can close
+the exam while a candidate sits on the form. The open flag is therefore checked
+again immediately before the attempt is written, and the page is
+`force-dynamic` so a prerender can never keep offering a closed exam.
+
+### Attempts
+
+| Existing state | Result |
+| --- | --- |
+| No attempt | New attempt created, `in_progress` |
+| `in_progress` attempt | **Resumed** — same attempt, `startedAt` untouched |
+| `submitted` / `auto_submitted` | Blocked: *"You have already completed this exam."* |
+
+`startedAt` and `status` come from schema defaults, so the browser cannot supply
+either. Resuming deliberately leaves `startedAt` alone, since the timer will
+later be computed from it — a candidate whose PC restarts does not get extra
+time.
+
+Two simultaneous starts cannot create two active attempts: the partial unique
+index `attempts_one_in_progress_per_candidate` rejects the loser, and that
+request resumes the winner's attempt rather than returning an error.
+
+**No exam paper is generated here.** No `AttemptQuestion` rows are written;
+that is a later phase.
+
+### Name and email
+
+The typed name and email are recorded on the attempt (`entered_name`,
+`entered_email`), **not** written back to the candidate record. The Google Form
+submission is the authoritative application data, so overwriting it with
+whatever someone types at a test terminal would corrupt it. Keeping both lets an
+admin spot a candidate who entered details that differ from their application.
+
+### Not yet built
+
+Paper generation, the exam interface, the timer, auto-save, answer restoration,
+submission and scoring are all later phases. A successful start currently
+confirms the attempt exists and says the exam screen is not available yet.
+
+No attempt identifier is sent to the browser, and no candidate session or token
+exists yet. There is nothing to protect until the exam interface is built, and
+inventing a session now would mean guessing at what that phase needs.
+
 ## Exam settings
 
 Admins configure the exam at `/admin/settings`. Both viewing and saving require
