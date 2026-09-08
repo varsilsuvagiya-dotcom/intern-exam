@@ -8,12 +8,14 @@ export function QuestionDisplay({
   total,
   answer,
   onAnswer,
+  disabled,
 }: {
   question: CandidateQuestion;
   index: number;
   total: number;
   answer: string | undefined;
   onAnswer: (value: string) => void;
+  disabled: boolean;
 }) {
   return (
     <article>
@@ -61,7 +63,8 @@ export function QuestionDisplay({
             // Remounts per question so the textarea shows this question's answer.
             key={question.id}
             defaultValue={answer ?? ""}
-            onChange={(event) => onAnswer(event.target.value.trim())}
+            onChange={(event) => onAnswer(event.target.value)}
+            disabled={disabled}
             rows={6}
             className="mt-2 w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
           />
@@ -88,6 +91,7 @@ export function QuestionDisplay({
                     value={option.key}
                     checked={selected}
                     onChange={() => onAnswer(option.key)}
+                    disabled={disabled}
                     className="mt-0.5"
                   />
                   <span>

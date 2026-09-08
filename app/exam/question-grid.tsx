@@ -76,9 +76,6 @@ export function QuestionGrid({
         </div>
       </dl>
 
-      <p className="mt-4 text-xs text-black/50 dark:text-white/50">
-        Answers are not saved yet in this build.
-      </p>
     </aside>
   );
 }

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 
 import { getCandidatePaper } from "@/lib/exam/candidate-paper";
 import { getExamSessionAttemptId } from "@/lib/exam/exam-session";
+import { getAttemptTiming } from "@/lib/exam/exam-timer";
+import { loadAnswers } from "@/lib/exam/save-answer";
 
 import { ExamShell } from "./exam-shell";
 
@@ -53,5 +55,19 @@ export default async function ExamPage() {
     );
   }
 
-  return <ExamShell paper={access.paper} />;
+  const [timing, answers] = await Promise.all([
+    getAttemptTiming(attemptId),
+    loadAnswers(attemptId),
+  ]);
+
+  if (timing.kind !== "ok") {
+    return (
+      <Notice
+        title="Your exam is complete"
+        body="This exam is no longer in progress. Your supervisor will take it from here."
+      />
+    );
+  }
+
+  return <ExamShell paper={access.paper} initialAnswers={answers} initialTiming={timing.timing} />;
 }

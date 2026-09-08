@@ -155,15 +155,51 @@ ring-highlighted — states differ in weight and border as well as colour, and
 each button carries an accessible label naming its state. A legend explains
 them. Navigation is entirely client-side and writes nothing to the database.
 
+### Timer
+
+The deadline is always `attempt.startedAt + durationMinutes`, computed on the
+server. The browser is told the deadline and the server's clock, and counts down
+from the *difference* between them — so changing the machine's clock shifts both
+sides equally and buys no extra time. The page re-syncs with the server every 30
+seconds, and a refresh recomputes from the original `startedAt` rather than
+restarting.
+
+When the deadline passes, the server refuses answer writes, the inputs are
+disabled and a banner explains that time is up. Answers already saved are kept.
+
+### Auto-save
+
+There is no Save button. Choosing an option saves immediately; free text saves
+after a ~600ms pause in typing, and anything still pending is flushed if the
+page is closed. The header shows *Saving… / Saved / Not saved*, and never claims
+a save that did not happen.
+
+Each question carries a request sequence number, so a slow save of an earlier
+choice landing after a newer one cannot overwrite it or misreport the state.
+`Answer.attemptQuestionId` is unique, so repeated saves upsert one row.
+
+Every save re-derives the attempt from the session cookie, confirms the question
+belongs to *that* attempt, confirms the attempt is still in progress and the
+timer has not expired, and decides from the stored section whether the question
+takes an option or prose — no client flag is trusted. `isCorrect` and
+`marksAwarded` are never written here; scoring owns them.
+
+### Resume
+
+Refresh, navigating away and back, or reopening the browser all return the same
+attempt, the same paper, the same option order and the saved answers, with the
+timer continuing from the original start. If the exam-session cookie is gone,
+the candidate re-enters through `/exam/start` with their mobile and lands back
+on the same attempt — no second attempt, no second paper.
+
+Two tabs on one session share the same attempt and write to the same answer
+rows.
+
 ### Not yet built
 
-- **Answers are not saved.** Selections live in browser state only and are lost
-  on refresh. The *paper* survives refresh; the answers do not. The UI says so
-  rather than implying otherwise.
-- **The timer is a placeholder.** It shows the configured duration and does not
-  count down. Authoritative timing from `startedAt + durationMinutes`, and
-  enforcement, come later.
-- **Submit is disabled.** No submission, auto-submit or scoring exists yet.
+**Submit is disabled.** Final submission, auto-submit on expiry, and scoring are
+later phases. Expiry currently stops the candidate from answering; it does not
+yet finalize the attempt.
 
 ## Paper generation
 
