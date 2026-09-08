@@ -14,6 +14,9 @@ export type ExamSettings = {
   examName: string;
   durationMinutes: number;
   isOpen: boolean;
+  easyPercent: number;
+  mediumPercent: number;
+  hardPercent: number;
   updatedAt: Date;
 };
 
@@ -29,7 +32,15 @@ export type SettingsError = { field: string; message: string };
 export async function getExamSettings(): Promise<ExamSettings> {
   const settings = await prisma.examSetting.findUnique({
     where: { id: SETTINGS_ID },
-    select: { examName: true, durationMinutes: true, isOpen: true, updatedAt: true },
+    select: {
+      examName: true,
+      durationMinutes: true,
+      isOpen: true,
+      easyPercent: true,
+      mediumPercent: true,
+      hardPercent: true,
+      updatedAt: true,
+    },
   });
 
   if (!settings) {
@@ -45,8 +56,17 @@ export async function isExamOpen(): Promise<boolean> {
   return (await getExamSettings()).isOpen;
 }
 
+export type SettingsUpdate = {
+  examName: string;
+  durationMinutes: number;
+  isOpen: boolean;
+  easyPercent: number;
+  mediumPercent: number;
+  hardPercent: number;
+};
+
 export function validateSettings(form: FormData):
-  | { ok: true; value: { examName: string; durationMinutes: number; isOpen: boolean } }
+  | { ok: true; value: SettingsUpdate }
   | { ok: false; errors: SettingsError[] } {
   const errors: SettingsError[] = [];
 
@@ -74,18 +94,48 @@ export function validateSettings(form: FormData):
     errors.push({ field: "status", message: "Exam status must be open or closed." });
   }
 
+  const percents = (["easyPercent", "mediumPercent", "hardPercent"] as const).map((field) => {
+    const raw = String(form.get(field) ?? "").trim();
+
+    if (!/^\d+$/.test(raw)) {
+      errors.push({ field, message: "Each difficulty share must be a whole percentage." });
+      return Number.NaN;
+    }
+
+    return Number(raw);
+  });
+
+  const [easyPercent, mediumPercent, hardPercent] = percents;
+
+  if (percents.every((value) => Number.isInteger(value))) {
+    const total = easyPercent + mediumPercent + hardPercent;
+
+    if (total !== 100) {
+      errors.push({
+        field: "difficultyMix",
+        message: `The difficulty mix must add up to 100%, currently ${total}%.`,
+      });
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
 
-  return { ok: true, value: { examName, durationMinutes, isOpen: statusRaw === "open" } };
+  return {
+    ok: true,
+    value: {
+      examName,
+      durationMinutes,
+      isOpen: statusRaw === "open",
+      easyPercent,
+      mediumPercent,
+      hardPercent,
+    },
+  };
 }
 
-export async function updateExamSettings(value: {
-  examName: string;
-  durationMinutes: number;
-  isOpen: boolean;
-}): Promise<boolean> {
+export async function updateExamSettings(value: SettingsUpdate): Promise<boolean> {
   const result = await prisma.examSetting.updateMany({ where: { id: SETTINGS_ID }, data: value });
   return result.count === 1;
 }

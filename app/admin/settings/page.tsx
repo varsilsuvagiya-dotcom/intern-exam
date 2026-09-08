@@ -30,6 +30,9 @@ export default async function ExamSettingsPage() {
           examName: settings.examName,
           durationMinutes: settings.durationMinutes,
           isOpen: settings.isOpen,
+          easyPercent: settings.easyPercent,
+          mediumPercent: settings.mediumPercent,
+          hardPercent: settings.hardPercent,
         }}
       />
 

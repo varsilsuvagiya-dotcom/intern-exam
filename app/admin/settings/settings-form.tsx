@@ -10,7 +10,7 @@ const FIELD =
 export function SettingsForm({
   settings,
 }: {
-  settings: { examName: string; durationMinutes: number; isOpen: boolean };
+  settings: { examName: string; durationMinutes: number; isOpen: boolean; easyPercent: number; mediumPercent: number; hardPercent: number };
 }) {
   const [state, save, saving] = useActionState<SettingsState, FormData>(saveSettings, {
     status: "idle",
@@ -60,6 +60,36 @@ export function SettingsForm({
           ) : null}
         </label>
       </div>
+
+      <fieldset>
+        <legend className="text-sm font-medium">Difficulty mix</legend>
+        <p className="mt-1 text-sm text-black/60 dark:text-white/60">
+          The target share of each difficulty when a paper is drawn. Must total 100%. Papers already
+          generated are not affected.
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-4">
+          {(
+            [
+              ["easyPercent", "Easy %", settings.easyPercent],
+              ["mediumPercent", "Medium %", settings.mediumPercent],
+              ["hardPercent", "Hard %", settings.hardPercent],
+            ] as const
+          ).map(([name, label, value]) => (
+            <label key={name} className="block text-sm font-medium">
+              {label}
+              <input name={name} defaultValue={value} inputMode="numeric" className={FIELD} />
+              {errorFor(name) ? (
+                <span className="mt-1 block text-sm font-normal text-red-600 dark:text-red-400">
+                  {errorFor(name)}
+                </span>
+              ) : null}
+            </label>
+          ))}
+        </div>
+        {errorFor("difficultyMix") ? (
+          <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errorFor("difficultyMix")}</p>
+        ) : null}
+      </fieldset>
 
       <p className="text-sm text-black/60 dark:text-white/60">
         {settings.isOpen

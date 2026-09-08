@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { getExamSettings } from "@/lib/exam-settings";
 import { normalizeMobile } from "@/lib/integrations/candidate-payload";
 
+import { ensureExamPaper } from "./paper-generation";
+
 const MAX_NAME = 200;
 const MAX_EMAIL = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,6 +26,27 @@ function readInput(form: FormData): StartInput {
     email: String(form.get("email") ?? "").trim().toLowerCase(),
     mobile: String(form.get("mobile") ?? "").trim(),
   };
+}
+
+/// Makes sure the attempt has its paper before reporting success. A generation
+/// failure is logged with its internal reason for an admin to act on, while the
+/// candidate only ever sees the generic failure state.
+async function withPaper(attemptId: string, resumed: boolean): Promise<StartOutcome> {
+  try {
+    const result = await ensureExamPaper(attemptId);
+
+    if (!result.ok) {
+      console.error("Exam paper could not be generated.", { failure: result.failure });
+      return { kind: "failed" };
+    }
+  } catch (error) {
+    console.error("Exam paper generation threw.", {
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+    return { kind: "failed" };
+  }
+
+  return { kind: "started", resumed };
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -95,14 +118,15 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
   const existing = await prisma.attempt.findFirst({
     where: { candidateId: candidate.id },
-    select: { status: true },
+    select: { id: true, status: true },
     orderBy: { startedAt: "desc" },
   });
 
   if (existing?.status === "in_progress") {
     // Crash recovery: the same attempt continues, and startedAt is left alone so
-    // the timer keeps running from the real start.
-    return { kind: "started", resumed: true };
+    // the timer keeps running from the real start. The paper is ensured rather
+    // than redrawn, so the candidate sees exactly what they saw before.
+    return withPaper(existing.id, true);
   }
 
   if (existing) {
@@ -113,9 +137,8 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
   try {
     // startedAt and status come from the schema defaults, so neither can be set
-    // by the request. No AttemptQuestion rows are created here: generating the
-    // paper is a later phase.
-    await prisma.attempt.create({
+    // by the request.
+    const attempt = await prisma.attempt.create({
       data: {
         candidateId: candidate.id,
         enteredName: input.name,
@@ -124,13 +147,18 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
       select: { id: true },
     });
 
-    return { kind: "started", resumed: false };
+    return withPaper(attempt.id, false);
   } catch (error) {
     // A double-click can race two creates. The partial unique index rejects the
     // loser, whose attempt already exists, so resuming is the correct answer
     // rather than an error.
     if (isUniqueViolation(error)) {
-      return { kind: "started", resumed: true };
+      const attempt = await prisma.attempt.findFirst({
+        where: { candidateId: candidate.id, status: "in_progress" },
+        select: { id: true },
+      });
+
+      return attempt ? withPaper(attempt.id, true) : { kind: "failed" };
     }
 
     console.error("Exam start failed.", {

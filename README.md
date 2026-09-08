@@ -4,8 +4,11 @@ CloudUS is an online examination system used to assess fresher candidates during
 Candidates take the exam on supervised office machines; results are produced automatically
 for the hiring team.
 
-This repository currently contains **Phase 0** only: the project foundation.
-No exam, admin, or candidate functionality has been implemented yet.
+Built so far: the database schema, admin authentication, candidate
+synchronization from the Google Form, question-bank CSV import and management,
+exam settings, candidate eligibility and start, and exam paper generation. The
+exam interface itself, the timer, auto-save, submission and scoring are not
+built yet.
 
 ## Technology stack
 
@@ -70,7 +73,8 @@ npx prisma generate   # regenerate the client into lib/generated/prisma
 The generated client is git-ignored and is regenerated automatically on `npm install`.
 The shared client instance is exported from `lib/db`.
 
-No business models are defined yet; they arrive in later phases.
+The models are `Question`, `Candidate`, `Attempt`, `AttemptQuestion`, `Answer`,
+`Admin`, `AdminSession` and `ExamSetting`.
 
 ## Admin access
 
@@ -100,6 +104,84 @@ browser, or stored in plaintext. Login failures always return the same message,
 so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
+
+## Paper generation
+
+Each attempt gets its own randomly drawn paper of 55 questions worth 70 marks.
+It is drawn once, when the candidate starts, and **never redrawn** — not on
+refresh, not on resume, not after the question bank or the difficulty mix
+changes. The stored `attempt_questions` rows are the paper.
+
+### Selection
+
+Only questions with `status = ready` and `isActive = true` are eligible. Draft
+and deactivated questions are never drawn.
+
+Sections always appear in blueprint order, occupying fixed positions:
+
+```
+1–10  §1    11–16 §2    17–26 §3    27–34 §4
+35–40 §5    41–44 §6    45–50 §7    51–55 §8
+```
+
+`displayOrder` is persisted explicitly as a gapless 1–55; nothing depends on
+insertion order.
+
+### Difficulty
+
+The target mix is an admin setting (default 40/40/20, see Exam settings). Per
+section it is converted to whole numbers by **largest remainder**: floor each
+share, then give the leftovers to the largest fractional parts. This always sums
+to the section's exact count, where naive rounding would not — 40/40/20 of 4
+questions is 1.6/1.6/0.8, which rounds to 2/2/1 and overshoots. A 10-question
+section becomes 4/4/2; a 6-question section becomes 3/2/1.
+
+If the bank is short on a difficulty, the allocation clamps to what exists and
+redistributes the shortfall to difficulties with spare questions, so the section
+still reaches its exact count with the smallest deviation available. If there
+are not enough eligible questions overall, **generation fails** — it never
+shrinks a section, reuses a question, or reaches for ineligible ones.
+
+### Section 7
+
+Drawn as whole lessons, not individual questions. Groups with fewer than three
+eligible questions are excluded entirely. Every complete group's difficulty
+profile is scored against the target, the closest pair is chosen (at random
+among equally close pairs), and each group's three questions stay together and
+in order. Fewer than two complete groups fails generation.
+
+### Options
+
+Each question stores a random permutation in `shuffledOptionOrder`, e.g.
+`["c","a","d","b"]` — the order to display the options in. **`correct` keeps
+the original option key**; it is never rewritten to a shuffled position. So a
+question whose answer is C stores `correct = "c"` regardless of where C appears.
+Every permutation is validated to hold a, b, c and d exactly once.
+
+### Snapshot
+
+Copied to `attempt_questions` at draw time: question text, code block, all four
+options, correct key, explanation, lesson text, lesson group, and marks. A
+historical paper renders entirely from these, so editing or deactivating a
+question never changes an exam someone already sat.
+
+### Concurrency and failure
+
+Generation runs in one transaction: a failure part way through leaves no partial
+paper. Two simultaneous requests cannot produce two papers — the unique
+constraints on `(attempt_id, display_order)` and `(attempt_id, question_id)`
+reject the loser, which then returns the winner's paper instead of an error.
+
+Failures carry an internal code (`SECTION_INSUFFICIENT_QUESTIONS`,
+`SECTION_7_INSUFFICIENT_LESSON_GROUPS`, `PAPER_INVARIANT_FAILED`, …) for the
+server log. Candidates only ever see a generic message.
+
+### Testing
+
+`ensureExamPaper(attemptId)` and `getExamPaper(attemptId)` are the entry points;
+`allocateDifficultyCounts` and `validateGeneratedPaper` are pure and testable on
+their own, and `shuffle` accepts an injected random source so tests can be
+deterministic while production uses `crypto.randomInt`.
 
 ## Candidate start
 
@@ -179,6 +261,7 @@ a signed-in admin and are checked on the server.
 | Exam name | `CloudUS Online Exam` | Required, trimmed, ≤120 characters |
 | Duration | `75` minutes | Whole number, 1–1440 |
 | Exam status | **Closed** | `open` or `closed` only |
+| Difficulty mix | 40 / 40 / 20 | Whole percentages that must total 100 |
 
 **The exam ships closed.** A fresh deployment must never admit candidates before
 an admin deliberately opens it, so `false` is the database default, the seeded

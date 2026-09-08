@@ -143,6 +143,10 @@ model AttemptQuestion {
   optionD      String    @map("option_d")
   correct      OptionKey
   explanation  String?
+  /// Section 7 only: the lesson shown above the three questions of its group,
+  /// snapshotted so a historical paper renders without the live Question row.
+  lessonText   String?   @map("lesson_text")
+  lessonGroup  String?   @map("lesson_group")
   marks        Decimal   @db.Decimal(4, 2)
 
   attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
@@ -190,6 +194,12 @@ model ExamSetting {
   /// Closed by default so a fresh deployment can never accidentally admit
   /// candidates before an admin opens the exam.
   isOpen          Boolean  @default(false) @map("is_open")
+  /// Target difficulty mix for a drawn paper, as whole percentages summing to
+  /// 100. Unlike the section counts, this is genuinely tunable, so the
+  /// requirements call for it to be admin-editable.
+  easyPercent     Int      @default(40) @map("easy_percent")
+  mediumPercent   Int      @default(40) @map("medium_percent")
+  hardPercent     Int      @default(20) @map("hard_percent")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
