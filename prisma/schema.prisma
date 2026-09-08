@@ -125,8 +125,19 @@ model AttemptQuestion {
   displayOrder        Int         @map("display_order")
   /// Option order used for this attempt, e.g. [c, a, d, b].
   shuffledOptionOrder OptionKey[] @map("shuffled_option_order")
-  /// Snapshot: the question bank may be edited after this paper was drawn.
-  marks               Decimal     @db.Decimal(4, 2)
+
+  // Snapshot of the question exactly as it was shown. The question bank stays
+  // editable, so result review reads these rather than the live Question row.
+  // Only codeBlock and explanation are nullable, matching Question itself.
+  questionText String    @map("question_text")
+  codeBlock    String?   @map("code_block")
+  optionA      String    @map("option_a")
+  optionB      String    @map("option_b")
+  optionC      String    @map("option_c")
+  optionD      String    @map("option_d")
+  correct      OptionKey
+  explanation  String?
+  marks        Decimal   @db.Decimal(4, 2)
 
   attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
