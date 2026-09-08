@@ -56,7 +56,7 @@ none may be prefixed with `NEXT_PUBLIC_`, and `.env` is git-ignored.
 | `DIRECT_URL` | Direct Supabase PostgreSQL connection used by Prisma migrations |
 | `ADMIN_EMAIL` | Email of the admin account created by the seed |
 | `ADMIN_PASSWORD` | Password for that account; stored only as a bcrypt hash |
-| `GOOGLE_APPS_SCRIPT_SECRET` | Shared secret for the candidate sync integration |
+| `GOOGLE_APPS_SCRIPT_SECRET` | Bearer secret the Apps Script sends when syncing candidates; use a long random value |
 
 ## Prisma
 
@@ -101,6 +101,89 @@ so the form cannot be used to discover which accounts exist.
 
 There is no login rate limiting yet — see the security note below.
 
+## Candidate synchronization
+
+Candidates apply through a Google Form. Their record must already exist in
+CloudUS before they sit the exam, because the exam is later matched to their
+application by mobile number. A Google Apps Script attached to the response
+sheet posts each response to this endpoint.
+
+**The CloudUS side of this integration is implemented. The Google Form, Google
+Sheet, and Apps Script are external systems and have not been configured yet.**
+
+### Endpoint
+
+```http
+POST /api/integrations/candidates
+Authorization: Bearer <GOOGLE_APPS_SCRIPT_SECRET>
+Content-Type: application/json
+```
+
+```json
+{
+  "google_form_response_id": "12345",
+  "name": "John Doe",
+  "email": "john@example.com",
+  "mobile": "9876543210"
+}
+```
+
+All four fields are required.
+
+### Responses
+
+| Status | Body | Meaning |
+| --- | --- | --- |
+| 201 | `{"success":true,"candidate_id":"…","created":true}` | Candidate created |
+| 200 | `{"success":true,"candidate_id":"…","created":false}` | Existing candidate updated |
+| 400 | `{"success":false,"errors":["…"]}` | Invalid JSON or failed validation |
+| 401 | `{"success":false,"error":"Unauthorized."}` | Missing or wrong bearer secret |
+| 500 | `{"success":false,"error":"…"}` | Secret not configured, or a database failure |
+
+### Idempotency
+
+`google_form_response_id` is the idempotency key and is unique in the database.
+Re-sending the same response id updates that candidate instead of creating a
+second one, so Apps Script may safely retry. The candidate id, the response id,
+and any existing exam attempts are never changed by a re-sync. Simultaneous
+requests for the same response id are also safe: the unique constraint rejects
+the loser and the request is retried as an update.
+
+### Normalization
+
+- **name** — surrounding whitespace trimmed.
+- **email** — trimmed and lowercased. Emails are deliberately not unique;
+  several application records may share one.
+- **mobile** — spaces, hyphens, brackets and dots removed, and an optional
+  `+91`, `91` or leading `0` prefix dropped. The result must be a 10-digit
+  Indian mobile number starting 6–9, otherwise the request is rejected rather
+  than guessed at. Mobile is always stored as a string, never a number.
+
+### Testing locally
+
+```bash
+curl -X POST http://localhost:3000/api/integrations/candidates \
+  -H "Authorization: Bearer $GOOGLE_APPS_SCRIPT_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"google_form_response_id":"test-1","name":"Test User","email":"test@example.com","mobile":"9876543210"}'
+```
+
+### Apps Script sketch
+
+```javascript
+function syncToCloudUS(response) {
+  UrlFetchApp.fetch("https://<your-host>/api/integrations/candidates", {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + PropertiesService.getScriptProperties().getProperty("CLOUDUS_SECRET") },
+    payload: JSON.stringify(response),
+    muteHttpExceptions: true,
+  });
+}
+```
+
+Keep the secret in Apps Script's Script Properties, never in the script body.
+
 ## Scripts
 
 ```bash
@@ -126,6 +209,13 @@ public/       static assets
 
 - Admin login has **no rate limiting**. Brute-force protection is a deliberate
   gap for now; add it before the app is reachable from the public internet.
+- The candidate sync endpoint has **no rate limiting** either. It is protected
+  by a server-to-server bearer secret and compares it in constant time, but if
+  it becomes publicly reachable it should be rate limited and ideally
+  IP-restricted to Google's Apps Script ranges.
+- `GOOGLE_APPS_SCRIPT_SECRET` must be a long random value in production. If it
+  is unset the sync endpoint refuses every request rather than accepting
+  unauthenticated writes.
 - `.env` is git-ignored and must stay that way. `.env.example` holds placeholder
   names only — never real values.
 - Rotate `ADMIN_PASSWORD` and the database credentials if they have ever been
