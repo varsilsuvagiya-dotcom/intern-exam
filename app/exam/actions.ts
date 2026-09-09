@@ -8,6 +8,7 @@ import {
   type FinalizeResult,
   type SubmissionSummary,
 } from "@/lib/exam/finalize-attempt";
+import { saveProgress, type SaveProgressResult } from "@/lib/exam/exam-progress";
 import { saveAnswer, type SaveResult } from "@/lib/exam/save-answer";
 
 export type TimingResponse =
@@ -60,6 +61,24 @@ export async function submitExam(intent: "manual" | "automatic"): Promise<Finali
   }
 
   return finalizeAttempt(attemptId, intent === "automatic" ? "automatic" : "manual");
+}
+
+/// Records which question the candidate is on, and that they have seen it.
+///
+/// `sequence` orders the reports so a stale one cannot overwrite a newer
+/// position; it carries no authority of its own. Like every other action here
+/// it takes no attempt id — the attempt comes from the session cookie.
+export async function persistProgress(
+  attemptQuestionId: string,
+  sequence: number,
+): Promise<SaveProgressResult> {
+  const attemptId = await getExamSessionAttemptId();
+
+  if (!attemptId) {
+    return { kind: "unauthorized" };
+  }
+
+  return saveProgress(attemptId, attemptQuestionId, sequence);
 }
 
 export async function persistAnswer(

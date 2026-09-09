@@ -9,6 +9,12 @@ export type SaveStatus = "idle" | "saving" | "saved" | "failed" | "expired";
 /// Free text saves after a pause rather than on every keystroke.
 const TEXT_DEBOUNCE_MS = 600;
 
+/// The longest `flush()` will wait for outstanding saves before reporting that
+/// it could not confirm them. Generous enough for a full paper's queue settling
+/// against a remote database, short enough that a candidate is never left
+/// waiting on a request that will never land.
+const FLUSH_TIMEOUT_MS = 30_000;
+
 type Value = { selectedOption?: string | null; textAnswer?: string | null };
 
 /// Persists answers as the candidate works.
@@ -104,6 +110,15 @@ export function useAutosave(onExpired: () => void) {
   /// Sends anything still waiting on its debounce and waits for every request to
   /// land. Resolves false if any save failed, so a submission can refuse to
   /// proceed on counts that would be wrong.
+  ///
+  /// The wait is bounded. A Server Action whose connection dropped mid-flight
+  /// does not reject promptly — the browser keeps retrying underneath and the
+  /// promise can stay pending indefinitely. Waiting on it forever meant one
+  /// momentary network blip left every later flush hanging, so the submit
+  /// dialog sat on "Saving and checking your answers…" with no way forward.
+  /// Timing out resolves false rather than true: the honest answer is that the
+  /// saves could not be confirmed, and the dialog already refuses to state
+  /// counts it cannot trust and offers a retry.
   const flush = useCallback(async (): Promise<boolean> => {
     const waiting: Promise<boolean>[] = [];
 
@@ -119,8 +134,33 @@ export function useAutosave(onExpired: () => void) {
     pending.current.clear();
     waiting.push(...inFlight.current);
 
-    const results = await Promise.all(waiting);
-    return results.every(Boolean);
+    if (waiting.length === 0) {
+      return true;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), FLUSH_TIMEOUT_MS);
+    });
+
+    try {
+      const results = await Promise.race([
+        Promise.all(waiting).then((values) => values.every(Boolean)),
+        timedOut,
+      ]);
+
+      if (!results) {
+        // Whatever is still pending is not going to land. Dropping it stops one
+        // abandoned request from making every later flush time out too; it can
+        // still settle on its own, and its own sequence check decides whether
+        // its result is applied.
+        inFlight.current.clear();
+      }
+
+      return results;
+    } finally {
+      clearTimeout(timer);
+    }
   }, [send]);
 
   // Best-effort flush if the candidate navigates away mid-typing.

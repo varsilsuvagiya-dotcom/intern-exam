@@ -10,10 +10,30 @@ import { fetchTiming } from "./actions";
 /// display: the server's deadline is what actually governs the exam.
 const RESYNC_MS = 30_000;
 
+/// The one threshold this component has ever had. It is a presentation
+/// threshold, not a business rule — nothing server-side changes at five
+/// minutes — so it is styled here rather than moved.
+const LOW_SECONDS = 300;
+
+/// Hours are shown only once the exam is long enough to need them. A 75-minute
+/// paper reads "01:14:59" at the start and "09:59" near the end, rather than
+/// "74:59", which is hard to convert under pressure.
 function format(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(rest).padStart(2, "0");
+
+  return hours > 0 ? `${String(hours).padStart(2, "0")}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/// Spoken form for the announcement. Screen readers say "01:14:59" as digits;
+/// this says what a person would say.
+function spoken(seconds: number): string {
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes <= 1) return "1 minute of examination time remaining.";
+  return `${minutes} minutes of examination time remaining.`;
 }
 
 export function ExamTimerDisplay({
@@ -73,17 +93,52 @@ export function ExamTimerDisplay({
     };
   }, [initial.serverNow, onExpire]);
 
-  const low = remaining <= 300 && remaining > 0;
+  const expired = remaining === 0;
+  const low = remaining <= LOW_SECONDS && !expired;
+
+  // Announced at five minutes and then at each whole minute below it, rather
+  // than on every tick. Previously the countdown itself became the live region
+  // once it went low, so a screen reader read out all three hundred remaining
+  // seconds one by one.
+  const announcement = expired
+    ? "Examination time has ended."
+    : low && remaining % 60 === 0
+      ? spoken(remaining)
+      : "";
 
   return (
-    <span className="text-sm text-black/60 dark:text-white/60">
-      Time remaining:{" "}
+    <div className="flex flex-col items-end leading-none">
       <span
-        className={`font-medium tabular-nums ${low ? "text-red-600 dark:text-red-400" : ""}`}
-        aria-live={low ? "polite" : "off"}
+        id="exam-timer-label"
+        className="text-[11px] font-medium uppercase tracking-wide text-exam-muted"
       >
-        {remaining === 0 ? "00:00" : format(remaining)}
+        Time remaining
       </span>
-    </span>
+
+      {/* `role="timer"` names this for assistive tech without making it a live
+          region; the announcement below is what actually speaks. */}
+      <span
+        role="timer"
+        aria-labelledby="exam-timer-label"
+        className={[
+          "exam-tabular mt-1 text-[26px] font-semibold tracking-tight tabular-nums",
+          expired ? "text-exam-danger" : low ? "text-exam-danger" : "text-exam-ink",
+        ].join(" ")}
+      >
+        {format(remaining)}
+      </span>
+
+      {/* The low state is never carried by colour alone: the red is paired
+          with a word. */}
+      {low || expired ? (
+        <span className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-exam-danger">
+          {expired ? "Time is up" : "Ending soon"}
+        </span>
+      ) : null}
+
+      <span aria-live="polite" className="sr-only">
+        {announcement}
+      </span>
+    </div>
   );
 }

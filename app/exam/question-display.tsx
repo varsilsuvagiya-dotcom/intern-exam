@@ -2,6 +2,29 @@
 
 import type { CandidateQuestion } from "@/lib/exam/candidate-paper";
 
+import { ExamChip } from "@/components/exam/surface";
+
+import { FreeTextAnswer } from "./free-text-answer";
+import { LessonPanel, type LessonPosition } from "./lesson-panel";
+
+/// One scored question: context, the question itself, and the answer choices.
+///
+/// The reading measure is the substantive change here. The shell is full width
+/// so the palette can sit beside the question, but question text set across
+/// 1900px is genuinely hard to read — the eye loses the line on the return
+/// sweep. Everything a candidate reads is therefore capped at
+/// `--spacing-exam-measure` (68ch), while the shell around it stays wide.
+///
+/// S7's lesson box and S8's textarea still render from here, unchanged: their
+/// own design is Phase 5. Only shared colour and spacing reach them.
+
+/// Marks are per-question exam context, which is normal in a CBT and is
+/// already what the paper says. Nothing about correctness or scoring internals
+/// appears anywhere in this component.
+function marksLabel(marks: string): string {
+  return `${marks} ${Number(marks) === 1 ? "mark" : "marks"}`;
+}
+
 export function QuestionDisplay({
   question,
   index,
@@ -9,6 +32,7 @@ export function QuestionDisplay({
   answer,
   onAnswer,
   disabled,
+  lesson,
 }: {
   question: CandidateQuestion;
   index: number;
@@ -16,74 +40,90 @@ export function QuestionDisplay({
   answer: string | undefined;
   onAnswer: (value: string) => void;
   disabled: boolean;
+  /// Where this question sits in its Section 7 lesson group, or null for every
+  /// other section. Derived by the shell, which holds the whole paper.
+  lesson: LessonPosition | null;
 }) {
   return (
-    <article>
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-lg font-semibold">
-          Question {index + 1}
-          <span className="font-normal text-black/50 dark:text-white/50"> of {total}</span>
-        </h1>
-        <span className="text-sm text-black/50 dark:text-white/50">
-          {question.marks} {Number(question.marks) === 1 ? "mark" : "marks"}
-        </span>
+    <article className="max-w-exam-measure">
+      {/* A plain div, not a `header`: this is a row of context chips, and a
+          second `header` element on the page competes with the exam banner
+          for the `banner`-adjacent landmark reading. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {/* Section context: present, but quieter than the question itself. The
+            header already carries it too; here it orients the reader inside
+            the content column. */}
+        <ExamChip>
+          Section {question.section} · {question.sectionName}
+        </ExamChip>
+        {/* Marks are shown for scored sections only. Section 8 is unscored, and
+            a "0 marks" chip would tell the candidate their answer does not
+            matter — it is read by a person, so it does. */}
+        {question.freeText ? (
+          <ExamChip>Not scored</ExamChip>
+        ) : (
+          <ExamChip>{marksLabel(question.marks)}</ExamChip>
+        )}
       </div>
 
+      {/* The page's h1 is the examination, in the shell header. */}
+      <h2 className="mt-3 text-xl font-semibold tracking-tight text-exam-ink">
+        Question {index + 1}
+        <span className="font-normal text-exam-muted"> of {total}</span>
+      </h2>
+
       {question.lessonText ? (
-        <section
-          aria-label="Lesson"
-          className="mt-4 rounded-lg border border-black/15 bg-black/[0.03] p-4 dark:border-white/20 dark:bg-white/[0.06]"
-        >
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-black/60 dark:text-white/60">
-            Learn
-          </h2>
-          {/* Plain text rendering; the snapshot is never treated as markup. */}
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{question.lessonText}</p>
-        </section>
+        <LessonPanel lessonText={question.lessonText} position={lesson} className="mt-4" />
       ) : null}
 
-      <p className="mt-5 whitespace-pre-wrap text-base leading-relaxed">{question.questionText}</p>
+      {/* 17px with generous leading. Large enough to read for 75 minutes,
+          not so large it reads as a headline. Never truncated or clamped:
+          `whitespace-pre-wrap` keeps the author's line breaks. */}
+      <p className="mt-4 whitespace-pre-wrap text-[17px] leading-[1.65] text-exam-ink">
+        {question.questionText}
+      </p>
 
       {question.codeBlock ? (
-        <pre className="mt-4 overflow-x-auto rounded-lg border border-black/10 bg-black/[0.04] p-4 font-mono text-sm leading-relaxed dark:border-white/15 dark:bg-white/[0.06]">
+        // `min-w-0` on the article's children is what keeps a long code line
+        // scrolling inside this box instead of widening the page.
+        <pre
+          tabIndex={0}
+          role="group"
+          aria-label="Code for this question"
+          className="mt-4 max-w-full overflow-x-auto rounded-exam-md border border-exam-line bg-exam-subtle p-4 font-mono text-[13px] leading-[1.7] text-exam-ink"
+        >
           <code>{question.codeBlock}</code>
         </pre>
       ) : null}
 
       {question.freeText ? (
-        <div className="mt-6">
-          <label htmlFor="free-text-answer" className="block text-sm font-medium">
-            Your answer
-            <span className="ml-2 font-normal text-black/50 dark:text-white/50">
-              There is no right or wrong answer here.
-            </span>
-          </label>
-          <textarea
-            id="free-text-answer"
-            // Remounts per question so the textarea shows this question's answer.
-            key={question.id}
-            defaultValue={answer ?? ""}
-            onChange={(event) => onAnswer(event.target.value)}
-            disabled={disabled}
-            rows={6}
-            className="mt-2 w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20"
-          />
-        </div>
+        <FreeTextAnswer
+          questionId={question.id}
+          value={answer}
+          onAnswer={onAnswer}
+          disabled={disabled}
+        />
       ) : (
-        <fieldset className="mt-6">
-          <legend className="sr-only">Choose one answer</legend>
-          <div className="space-y-2">
+        <fieldset className="mt-6 min-w-0">
+          <legend className="text-sm font-medium text-exam-ink">Choose one answer</legend>
+
+          <div className="mt-3 flex flex-col gap-2">
             {question.options.map((option) => {
               const selected = answer === option.key;
 
               return (
                 <label
                   key={option.key}
-                  className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm ${
+                  className={[
+                    "group flex min-h-11 cursor-pointer items-start gap-3 rounded-exam-md border p-3",
+                    "transition-colors duration-[120ms] ease-out",
+                    // Selection is carried by the border weight and the letter
+                    // badge as well as the tint, so it never depends on colour.
                     selected
-                      ? "border-black bg-black/[0.04] dark:border-white dark:bg-white/[0.08]"
-                      : "border-black/15 dark:border-white/20"
-                  }`}
+                      ? "border-exam-primary bg-exam-primary-subtle"
+                      : "border-exam-line-strong bg-exam-surface hover:border-exam-muted hover:bg-exam-subtle",
+                    disabled ? "cursor-not-allowed opacity-60" : "",
+                  ].join(" ")}
                 >
                   <input
                     type="radio"
@@ -92,11 +132,33 @@ export function QuestionDisplay({
                     checked={selected}
                     onChange={() => onAnswer(option.key)}
                     disabled={disabled}
-                    className="mt-0.5"
+                    className="mt-0.5 size-4 shrink-0 accent-exam-primary"
                   />
-                  <span>
-                    <span className="font-medium">{option.label}.</span>{" "}
-                    <span className="whitespace-pre-wrap">{option.text}</span>
+
+                  {/* The letter is a fixed-width badge so multi-line option
+                      text aligns against a straight edge rather than reflowing
+                      around the label. */}
+                  <span
+                    className={[
+                      "flex size-5 shrink-0 items-center justify-center rounded-exam-sm text-xs font-semibold",
+                      selected
+                        ? "bg-exam-primary text-white"
+                        : "bg-exam-inset text-exam-ink-secondary",
+                    ].join(" ")}
+                  >
+                    {/* Not `aria-hidden`: the letter is part of how a
+                        candidate refers to an option ("I picked C"), and the
+                        radio's accessible name comes from this label. The
+                        full stop keeps it from running into the option text
+                        when read aloud. */}
+                    {option.label}
+                  </span>
+                  <span className="sr-only">.</span>
+
+                  {/* `min-w-0` lets a long unbroken option wrap instead of
+                      pushing the row wider than the column. */}
+                  <span className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-exam-ink">
+                    {option.text}
                   </span>
                 </label>
               );

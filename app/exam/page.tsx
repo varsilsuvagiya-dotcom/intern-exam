@@ -6,6 +6,7 @@ import { getCandidatePaper } from "@/lib/exam/candidate-paper";
 import { prisma } from "@/lib/db";
 import { getExamSessionAttemptId } from "@/lib/exam/exam-session";
 import { getAttemptTiming } from "@/lib/exam/exam-timer";
+import { loadProgress } from "@/lib/exam/exam-progress";
 import { loadAnswers } from "@/lib/exam/save-answer";
 
 import { CompletionScreen } from "./completion-screen";
@@ -20,9 +21,9 @@ function Notice({ title, body }: { title: string; body: string }) {
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-2 text-sm text-black/60 dark:text-white/60">{body}</p>
-        <Link href="/exam/start" className="mt-6 inline-block text-sm underline">
+        <h1 className="text-xl font-semibold tracking-tight text-exam-ink">{title}</h1>
+        <p className="mt-2 text-sm text-exam-muted">{body}</p>
+        <Link href="/exam/start" className="mt-6 inline-flex min-h-11 items-center text-sm font-medium text-exam-primary underline">
           Back to the start page
         </Link>
       </div>
@@ -62,14 +63,25 @@ export default async function ExamPage() {
     );
   }
 
-  const [timing, answers] = await Promise.all([
+  const [timing, answers, progress] = await Promise.all([
     getAttemptTiming(attemptId),
     loadAnswers(attemptId),
+    loadProgress(attemptId),
   ]);
 
   if (timing.kind !== "ok") {
     return <CompletionScreen status="submitted" />;
   }
 
-  return <ExamShell paper={access.paper} initialAnswers={answers} initialTiming={timing.timing} />;
+  return (
+    <ExamShell
+      paper={access.paper}
+      initialAnswers={answers}
+      initialTiming={timing.timing}
+      // Read on the server and passed in as initial state rather than applied
+      // after mount, so a resumed exam renders directly at the right question
+      // instead of showing question 1 and then jumping.
+      initialProgress={progress}
+    />
+  );
 }

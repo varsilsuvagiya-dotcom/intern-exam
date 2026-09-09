@@ -118,6 +118,18 @@ model Attempt {
   /// candidate who entered a different name or email than they applied with.
   enteredName     String?       @map("entered_name")
   enteredEmail    String?       @map("entered_email")
+  /// Where the candidate was working, as an AttemptQuestion.displayOrder within
+  /// this attempt's own paper — not a Question id, which says nothing about
+  /// display order once the paper is shuffled. Null on an attempt that has not
+  /// reported a position yet, which is every attempt created before this
+  /// column existed; resume then opens at the first question as it always did.
+  currentDisplayOrder Int?      @map("current_display_order")
+  /// Monotonic counter supplied by the browser with each position report. A
+  /// report is only applied if it is newer than the stored one, so a slow write
+  /// for question 20 landing after a fast write for question 23 cannot drag the
+  /// candidate backwards. Visited state needs no equivalent: it is set-once per
+  /// row and therefore cannot lose an earlier visit.
+  currentPositionSeq  Int       @default(0) @map("current_position_seq")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
@@ -167,6 +179,11 @@ model AttemptQuestion {
   /// than the live question, so flipping the flag in the bank cannot retroactively
   /// change what an already-sat paper was worth.
   scored       Boolean   @default(true)
+  /// When the candidate first opened this question. Null means never seen, which
+  /// is exactly the palette's "Not seen" state. Set once and never cleared, so
+  /// two concurrent writes cannot lose an earlier visit and no versioning is
+  /// needed. "Answered" is still derived from the Answer row, not from here.
+  visitedAt    DateTime? @map("visited_at")
 
   attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)

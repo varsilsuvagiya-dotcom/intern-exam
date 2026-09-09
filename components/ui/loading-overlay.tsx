@@ -2,10 +2,9 @@ import Image from "next/image";
 
 /// The full-screen loading state: the CloudUS mark on a white page.
 ///
-/// The ground is opaque white rather than translucent: the logo is a dark
-/// wordmark, and the app's dark-mode `body` showed through a translucent
-/// layer as grey, which the mark cannot read against. `backdrop-blur` is
-/// kept so anything that does paint behind it stays soft.
+/// The ground is opaque rather than translucent: the logo is a dark wordmark
+/// and needs a solid light surface to read against. `backdrop-blur` is kept so
+/// anything that does paint behind it stays soft.
 ///
 /// A `div`, not a `main`: during a route transition Next renders this
 /// alongside the outgoing page, and two `main` landmarks existed at once. It
@@ -15,7 +14,7 @@ export function LoadingOverlay({ label = "Loading…" }: { label?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-white px-6 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-exam-surface px-6 backdrop-blur-md"
     >
       <Image
         src="/cloudus-logo.png"
@@ -30,12 +29,12 @@ export function LoadingOverlay({ label = "Loading…" }: { label?: string }) {
           how far along the load is. */}
       <div
         aria-hidden="true"
-        className="h-0.5 w-56 max-w-[70vw] overflow-hidden rounded-full bg-black/10"
+        className="h-0.5 w-56 max-w-[70vw] overflow-hidden rounded-full bg-exam-inset"
       >
-        <span className="block h-full w-1/3 rounded-full bg-[#1f5fbf] motion-safe:animate-[loader-sweep_1.4s_ease-in-out_infinite]" />
+        <span className="block h-full w-1/3 rounded-full bg-exam-primary motion-safe:animate-[loader-sweep_1.4s_ease-in-out_infinite]" />
       </div>
 
-      <p className="text-sm text-black/55">{label}</p>
+      <p className="text-sm text-exam-muted">{label}</p>
     </div>
   );
 }

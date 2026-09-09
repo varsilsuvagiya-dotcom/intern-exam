@@ -1,16 +1,22 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Candidate-side foundation (unchanged).
+   Application foundation.
 
-   The exam interface renders against these variables. They are deliberately
-   left exactly as they were, including the dark-mode block, so nothing on the
-   candidate side shifts while the admin panel is redesigned.
+   Light only, across the whole application. Both the candidate and admin
+   scopes already set `color-scheme: light` and paint their own grounds, but
+   the document body sat outside both: under a dark OS it rendered near-black,
+   which showed through on the routes that belong to neither scope — the
+   landing page, `error.tsx` and `not-found.tsx`, the last of which a candidate
+   reaches when `/exam` fails. The dark block that caused it is gone rather
+   than overridden, because "light mode only" is a product requirement and a
+   dark palette here has never been contrast-tested.
    --------------------------------------------------------------------------- */
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -20,17 +26,152 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   CloudUS candidate examination tokens.
+
+   A separate system from the admin panel, for a different job. An admin
+   browses a dataset; a candidate reads one question at a time, for 75
+   minutes, under time pressure, on a machine they do not own. So the surfaces
+   are quieter, the reading sizes larger, and the status colors are chosen to
+   stay legible against a page someone is staring at rather than scanning.
+
+   Light only, by decision. Exams run on supervised office PCs, and a
+   colour scheme that has never been contrast-tested is not something to hand
+   a candidate mid-examination. See the user-side design plan section 4.
+
+   Prefixed `exam-` so nothing here can collide with an admin token of the
+   same role. Registered with @theme so they are usable as utilities
+   (bg-exam-surface, text-exam-muted, ...).
+   --------------------------------------------------------------------------- */
+
+@theme {
+  /* Surfaces */
+  --color-exam-page: #f4f6f9;
+  --color-exam-surface: #ffffff;
+  --color-exam-subtle: #f1f4f8;
+  --color-exam-inset: #e9edf3;
+
+  /* Borders */
+  --color-exam-line: #dfe4ec;
+  --color-exam-line-strong: #c4ccd8;
+
+  /* Text. `ink` carries question text, so it is a touch darker than the
+     admin equivalent: this is long-form reading, not table scanning. */
+  --color-exam-ink: #10151c;
+  --color-exam-ink-secondary: #414a59;
+  --color-exam-muted: #5d6675;
+  --color-exam-disabled: #949cab;
+
+  /* Brand */
+  --color-exam-primary: #1f5fbf;
+  --color-exam-primary-hover: #1a4fa0;
+  --color-exam-primary-active: #163f81;
+  --color-exam-primary-subtle: #eaf2fd;
+  --color-exam-primary-border: #b9d0ef;
+
+  /* Status. Each pairs a foreground with its own tinted background. The
+     foregrounds all clear 4.5:1 on white and on their own tint. */
+  --color-exam-success: #14622f;
+  --color-exam-success-bg: #e6f4ea;
+  --color-exam-warning: #7d4a00;
+  --color-exam-warning-bg: #fdf2e0;
+  --color-exam-danger: #a01a1a;
+  --color-exam-danger-bg: #fceaea;
+  --color-exam-info: #1a4fa0;
+  --color-exam-info-bg: #eaf2fd;
+  --color-exam-neutral: #414a59;
+  --color-exam-neutral-bg: #eef1f5;
+
+  /* Focus. One ring color everywhere, deliberately not the brand blue:
+     against a selected option that is already brand-tinted, a blue ring
+     would be the weakest possible signal. */
+  --color-exam-focus: #0b3d91;
+
+  /* Radius. Capped at 8px, same restraint as admin. */
+  --radius-exam-sm: 4px;
+  --radius-exam-md: 6px;
+  --radius-exam-lg: 8px;
+
+  /* Shadows. The exam uses borders; only genuinely floating surfaces (the
+     submit dialog, a sticky bar over scrolled content) get one. */
+  --shadow-exam-sm: 0 1px 2px rgba(16, 21, 28, 0.06);
+  --shadow-exam-md: 0 4px 12px rgba(16, 21, 28, 0.1);
+  --shadow-exam-lg: 0 16px 40px rgba(16, 21, 28, 0.2);
+
+  /* Layout constants the exam shell and palette build on. The palette width
+     is a token because the question column is measured against it at every
+     breakpoint. */
+  --spacing-exam-palette: 272px;
+  --spacing-exam-header: 60px;
+  --spacing-exam-actionbar: 68px;
+  /* Reading measure for question and lesson text. */
+  --spacing-exam-measure: 68ch;
+}
+
+/* ---------------------------------------------------------------------------
+   Candidate scope.
+
+   Every candidate examination surface renders inside `.cloudus-exam`, so
+   these rules cannot reach the admin panel or the public landing page. Same
+   mechanism the admin panel uses, for the same reason.
+   --------------------------------------------------------------------------- */
+
+.cloudus-exam {
+  background: var(--color-exam-page);
+  color: var(--color-exam-ink);
+  /* Neutralises the inherited dark-mode body colors for candidate routes.
+     The exam is light only. */
+  color-scheme: light;
+}
+
+/* Timers, question counts and marks. Digits must not reflow as they change —
+   a countdown whose width jitters every second is a distraction. */
+.cloudus-exam .exam-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One focus treatment everywhere. Focus is never removed, only restyled.
+   Two rings: the dark outline carries the meaning, and the white ring under
+   it keeps that outline visible where it lands on a dark or brand-filled
+   control (a selected palette cell, the primary submit button). */
+.cloudus-exam :focus-visible {
+  /* The colour is written literally rather than as `var(--color-exam-focus)`.
+     Tailwind v4 registers every `@theme` colour with `@property ...
+     inherits: false`, so on a descendant element the variable resolves to its
+     initial value rather than to the value set on `:root` — which rendered a
+     white outline, invisible on a brand-filled control. Utilities are
+     unaffected because Tailwind resolves them at build time; this hand-written
+     rule is the one place that has to spell the value out. Keep it in step
+     with `--color-exam-focus` above. */
+  outline: 2px solid #0b3d91;
+  /* Tailwind's `transition-colors` includes `outline-color`, which makes the
+     focus ring fade in from its default. A keyboard user needs to see where
+     focus landed immediately, so the ring is exempted from any transition. */
+  transition-property: none;
+  outline-offset: 2px;
+  border-radius: var(--radius-exam-sm);
+  /* White halo under the dark ring, so the ring stays visible where it lands
+     on a dark or brand-filled control. */
+  box-shadow: 0 0 0 4px #ffffff;
+}
+
+  /* Motion is limited to state feedback. Nothing on the candidate side moves
+   on its own, and nothing delays an interaction. */
+@media (prefers-reduced-motion: reduce) {
+  .cloudus-exam *,
+  .cloudus-exam *::before,
+  .cloudus-exam *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---------------------------------------------------------------------------
