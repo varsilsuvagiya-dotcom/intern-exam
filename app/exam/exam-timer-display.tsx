@@ -36,12 +36,23 @@ function spoken(seconds: number): string {
   return `${minutes} minutes of examination time remaining.`;
 }
 
+/// Why the exam stopped accepting answers.
+///
+/// `time-up` is the deadline passing, which is the normal ending and the one
+/// that auto-submits. `unavailable` is the session no longer resolving to a
+/// live attempt — an expired cookie, an attempt removed by an administrator,
+/// or one already finalized somewhere else. Both must stop answering, but they
+/// are not the same event and must not be described to the candidate as if
+/// they were: saying "time is up" beside a timer still reading an hour is a
+/// statement the candidate can see is false.
+export type StopReason = "time-up" | "unavailable";
+
 export function ExamTimerDisplay({
   initial,
   onExpire,
 }: {
   initial: TimingState;
-  onExpire: () => void;
+  onExpire: (reason: StopReason) => void;
 }) {
   const [remaining, setRemaining] = useState(initial.remainingSeconds);
 
@@ -62,7 +73,7 @@ export function ExamTimerDisplay({
 
       if (left === 0 && !expiredRef.current) {
         expiredRef.current = true;
-        onExpire();
+        onExpire("time-up");
       }
     };
 
@@ -78,12 +89,14 @@ export function ExamTimerDisplay({
 
         if (response.timing.expired && !expiredRef.current) {
           expiredRef.current = true;
-          onExpire();
+          onExpire("time-up");
         }
       } else if (!expiredRef.current) {
-        // The attempt is gone or no longer in progress; stop answering.
+        // The attempt is gone or no longer in progress. Answering has to stop
+        // either way, but the countdown is still running, so this is reported
+        // as its own reason rather than borrowed as an expiry.
         expiredRef.current = true;
-        onExpire();
+        onExpire("unavailable");
       }
     }, RESYNC_MS);
 

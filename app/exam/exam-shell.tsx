@@ -14,7 +14,7 @@ import { ExamBanner } from "@/components/exam/surface";
 import { CompletionScreen } from "./completion-screen";
 import { ExamHeader } from "./exam-header";
 import { lessonPosition } from "./lesson-panel";
-import { ExamTimerDisplay } from "./exam-timer-display";
+import { ExamTimerDisplay, type StopReason } from "./exam-timer-display";
 import { QuestionDisplay } from "./question-display";
 import { QuestionGrid } from "./question-grid";
 import { SubmitDialog } from "./submit-dialog";
@@ -84,13 +84,28 @@ export function ExamShell({
   /// says; the retry itself is unchanged.
   const [autoRetrying, setAutoRetrying] = useState(false);
 
-  const handleExpired = useCallback(() => setExpired(true), []);
+  /// Why answering stopped, or null while the exam is live.
+  ///
+  /// Kept separate from the fact that it stopped, because the two endings need
+  /// different words and different behaviour: the deadline auto-submits, a
+  /// broken session cannot submit anything and must not claim to be trying.
+  const [stopReason, setStopReason] = useState<StopReason | null>(
+    initialTiming.expired ? "time-up" : null,
+  );
+
+  const handleExpired = useCallback((reason: StopReason) => {
+    setExpired(true);
+    setStopReason((previous) => previous ?? reason);
+  }, []);
 
   // Driven by the expired flag rather than from inside the timer callback, so
   // the request survives the re-render that flag causes. The server still
   // checks its own clock before finalizing; this only asks.
   useEffect(() => {
-    if (!expired || finalStatus) {
+    // Only the deadline auto-submits. A session that no longer resolves to a
+    // live attempt has nothing to submit, and asking would fail forever — so
+    // the loop does not start, and the banner below does not promise it.
+    if (!expired || stopReason !== "time-up" || finalStatus) {
       return;
     }
 
@@ -131,7 +146,7 @@ export function ExamShell({
     return () => {
       cancelled = true;
     };
-  }, [expired, finalStatus]);
+  }, [expired, stopReason, finalStatus]);
 
   const { status, save, flush } = useAutosave(handleExpired);
 
@@ -243,9 +258,16 @@ export function ExamShell({
           until the completion screen replaces the whole shell. */}
       {expired ? (
         <ExamBanner tone="danger">
-          {autoRetrying
-            ? "Time is up. We are still submitting your examination — your saved answers are safe. Please keep this window open."
-            : "Time is up. Your examination is being submitted automatically. Please keep this window open."}
+          {stopReason === "unavailable"
+            ? // Nothing about the clock: it may well still be running, and the
+              // candidate can see it. This says what is true — the exam cannot
+              // continue in this window — and sends them to the person who can
+              // actually check, rather than promising a submission that has no
+              // attempt to submit.
+              "This examination is no longer active in this window. Your saved answers have been kept. Please tell your examination supervisor."
+            : autoRetrying
+              ? "Time is up. We are still submitting your examination — your saved answers are safe. Please keep this window open."
+              : "Time is up. Your examination is being submitted automatically. Please keep this window open."}
         </ExamBanner>
       ) : null}
 

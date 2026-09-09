@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { persistAnswer } from "./actions";
+import type { StopReason } from "./exam-timer-display";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "failed" | "expired";
 
@@ -22,7 +23,7 @@ type Value = { selectedOption?: string | null; textAnswer?: string | null };
 /// Each question carries its own sequence number. A response is only applied if
 /// it belongs to the newest request for that question, so a slow save of "B"
 /// landing after a fast save of "C" cannot make the UI claim B was stored.
-export function useAutosave(onExpired: () => void) {
+export function useAutosave(onExpired: (reason: StopReason) => void) {
   const [status, setStatus] = useState<SaveStatus>("idle");
 
   const sequences = useRef<Map<string, number>>(new Map());
@@ -54,7 +55,10 @@ export function useAutosave(onExpired: () => void) {
 
           if (result.kind === "expired" || result.kind === "finished") {
             setStatus("expired");
-            onExpired();
+            // `expired` is the deadline; `finished` means the attempt was
+            // already ended elsewhere. Reported apart so the shell can say
+            // which happened rather than assuming the clock ran out.
+            onExpired(result.kind === "expired" ? "time-up" : "unavailable");
             return false;
           }
 
