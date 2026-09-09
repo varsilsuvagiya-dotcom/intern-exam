@@ -195,11 +195,50 @@ on the same attempt — no second attempt, no second paper.
 Two tabs on one session share the same attempt and write to the same answer
 rows.
 
+### Submission
+
+Submit opens a confirmation showing how many questions are answered and which
+numbers are not — counted from the **stored** answers, never from browser state,
+and only after any pending save has been flushed, so it cannot overstate what
+was saved. If a save failed, the dialog says so instead of showing a count.
+*Go back* returns to the exam and finalizes nothing.
+
+An attempt ends exactly once. The write is a conditional update guarded on
+`status = in_progress`, so a repeated click, a retry, or a manual submit racing
+the auto-submit all find the row already settled and return the state that won,
+leaving its `submittedAt` untouched. A terminal attempt never reverts.
+
+Which terminal state gets written is the **server's** decision, from its own
+clock: submitting before the deadline records `submitted`, and a manual submit
+that arrives after it records `auto_submitted`, because the exam had already
+ended. The browser cannot force one or the other.
+
+### Auto-submit
+
+When the countdown reaches zero the page asks the server to finalize. The server
+finalizes only if its own clock agrees the deadline has passed — a browser
+claiming zero proves nothing — and the page keeps asking every couple of seconds
+until it does, since the client can reach zero a moment early.
+
+**A closed browser cannot make that request.** What protects the exam is not the
+client call but the server: once `startedAt + duration` has passed, answer
+writes are refused and the attempt is treated as expired everywhere, so an
+abandoned attempt cannot gain time or accept late answers. It simply stays
+`in_progress` until something touches it. Finalizing those without a browser
+would need a scheduled job, which this deployment does not yet have — worth
+adding before a real sitting if abandoned attempts must self-close.
+
+### After submission
+
+The completion screen states the exam was submitted (or that time expired) and
+shows **no score, marks, answers or explanations**. Refreshing keeps it: the
+page checks the stored status, so a finalized attempt never reopens the exam.
+Returning to `/exam/start` with the same mobile is refused, as before.
+
 ### Not yet built
 
-**Submit is disabled.** Final submission, auto-submit on expiry, and scoring are
-later phases. Expiry currently stops the candidate from answering; it does not
-yet finalize the attempt.
+Scoring, results, and CSV export are later phases. Nothing here computes
+`isCorrect`, `marksAwarded` or a total.
 
 ## Paper generation
 

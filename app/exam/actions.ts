@@ -2,6 +2,12 @@
 
 import { getExamSessionAttemptId } from "@/lib/exam/exam-session";
 import { getAttemptTiming, type TimingState } from "@/lib/exam/exam-timer";
+import {
+  finalizeAttempt,
+  getSubmissionSummary,
+  type FinalizeResult,
+  type SubmissionSummary,
+} from "@/lib/exam/finalize-attempt";
 import { saveAnswer, type SaveResult } from "@/lib/exam/save-answer";
 
 export type TimingResponse =
@@ -31,6 +37,29 @@ export async function fetchTiming(): Promise<TimingResponse> {
   }
 
   return { kind: "ok", timing: timing.timing };
+}
+
+export async function fetchSubmissionSummary(): Promise<SubmissionSummary> {
+  const attemptId = await getExamSessionAttemptId();
+
+  if (!attemptId) {
+    return { kind: "not-found" };
+  }
+
+  return getSubmissionSummary(attemptId);
+}
+
+/// `intent` only expresses which button was pressed. The server decides the
+/// resulting status from its own clock, so a manual submit after the deadline
+/// still records auto_submitted.
+export async function submitExam(intent: "manual" | "automatic"): Promise<FinalizeResult> {
+  const attemptId = await getExamSessionAttemptId();
+
+  if (!attemptId) {
+    return { kind: "not-found" };
+  }
+
+  return finalizeAttempt(attemptId, intent === "automatic" ? "automatic" : "manual");
 }
 
 export async function persistAnswer(

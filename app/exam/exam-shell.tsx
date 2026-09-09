@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { CandidatePaper } from "@/lib/exam/candidate-paper";
 import type { TimingState } from "@/lib/exam/exam-timer";
 
+import { CompletionScreen } from "./completion-screen";
 import { ExamTimerDisplay } from "./exam-timer-display";
 import { QuestionDisplay } from "./question-display";
 import { QuestionGrid } from "./question-grid";
+import { SubmitDialog } from "./submit-dialog";
 import { useAutosave, type SaveStatus } from "./use-autosave";
+import { submitExam } from "./actions";
+import type { TerminalStatus } from "@/lib/exam/finalize-attempt";
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   idle: "",
@@ -39,8 +43,50 @@ export function ExamShell({
     return seen;
   });
 
+  const [finalStatus, setFinalStatus] = useState<TerminalStatus | null>(null);
+
   const handleExpired = useCallback(() => setExpired(true), []);
-  const { status, save } = useAutosave(handleExpired);
+
+  // Driven by the expired flag rather than from inside the timer callback, so
+  // the request survives the re-render that flag causes. The server still
+  // checks its own clock before finalizing; this only asks.
+  useEffect(() => {
+    if (!expired || finalStatus) {
+      return;
+    }
+
+    let cancelled = false;
+
+    // The client can reach zero a moment before the server agrees, and that
+    // request is correctly refused. Keep asking until the server accepts, so a
+    // near-miss cannot leave the attempt open indefinitely.
+    const ask = async () => {
+      while (!cancelled) {
+        const result = await submitExam("automatic");
+
+        if (cancelled) return;
+
+        if (result.kind === "finalized") {
+          setFinalStatus(result.status);
+          return;
+        }
+
+        if (result.kind === "not-found") {
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+    };
+
+    void ask();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [expired, finalStatus]);
+
+  const { status, save, flush } = useAutosave(handleExpired);
 
   const question = paper.questions[current];
   const total = paper.questions.length;
@@ -74,6 +120,10 @@ export function ExamShell({
 
   const answeredCount = Object.keys(answers).length;
 
+  if (finalStatus) {
+    return <CompletionScreen status={finalStatus} />;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-black/10 dark:border-white/15">
@@ -92,14 +142,11 @@ export function ExamShell({
               {SAVE_LABEL[status]}
             </span>
             <ExamTimerDisplay initial={initialTiming} onExpire={handleExpired} />
-            <button
-              type="button"
-              disabled
-              title="Submitting is not available yet."
-              className="rounded-md border border-black/15 px-4 py-1.5 text-sm opacity-50 dark:border-white/20"
-            >
-              Submit exam
-            </button>
+            <SubmitDialog
+              disabled={expired}
+              flushPending={flush}
+              onFinalized={setFinalStatus}
+            />
           </div>
         </div>
       </header>

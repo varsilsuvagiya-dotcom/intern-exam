@@ -3,10 +3,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCandidatePaper } from "@/lib/exam/candidate-paper";
+import { prisma } from "@/lib/db";
 import { getExamSessionAttemptId } from "@/lib/exam/exam-session";
 import { getAttemptTiming } from "@/lib/exam/exam-timer";
 import { loadAnswers } from "@/lib/exam/save-answer";
 
+import { CompletionScreen } from "./completion-screen";
 import { ExamShell } from "./exam-shell";
 
 export const metadata: Metadata = { title: "Exam" };
@@ -35,15 +37,20 @@ export default async function ExamPage() {
     redirect("/exam/start");
   }
 
+  // A finalized attempt never reopens the exam, however the page is reached.
+  const finished = await prisma.attempt.findUnique({
+    where: { id: attemptId },
+    select: { status: true },
+  });
+
+  if (finished && finished.status !== "in_progress") {
+    return <CompletionScreen status={finished.status} />;
+  }
+
   const access = await getCandidatePaper(attemptId);
 
   if (access.kind === "finished") {
-    return (
-      <Notice
-        title="Your exam is complete"
-        body="This exam has already been submitted. Your supervisor will take it from here."
-      />
-    );
+    return <CompletionScreen status="submitted" />;
   }
 
   if (access.kind === "not-found") {
@@ -61,12 +68,7 @@ export default async function ExamPage() {
   ]);
 
   if (timing.kind !== "ok") {
-    return (
-      <Notice
-        title="Your exam is complete"
-        body="This exam is no longer in progress. Your supervisor will take it from here."
-      />
-    );
+    return <CompletionScreen status="submitted" />;
   }
 
   return <ExamShell paper={access.paper} initialAnswers={answers} initialTiming={timing.timing} />;
