@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ClipboardList, Users } from "lucide-react";
 
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
+import { PageBody, PageHeader } from "@/components/layout/page-header";
+import { buttonClass } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
+import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { PAGE_SIZES, listCandidates, parseCandidateFilters } from "@/lib/admin/query-candidates";
+import { requireAdmin } from "@/lib/auth/require-admin";
 
 export const metadata: Metadata = { title: "Candidates" };
 
 /// Filters live in the URL, so this must not be cached as a static page.
 export const dynamic = "force-dynamic";
-
-const CELL = "border-b border-black/5 px-3 py-2 text-left align-top dark:border-white/10";
-const FIELD =
-  "mt-1 w-full rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20";
 
 function formatDate(value: Date): string {
   return value.toISOString().slice(0, 16).replace("T", " ");
@@ -27,6 +29,8 @@ export default async function CandidatesPage({
   const filters = parseCandidateFilters(await searchParams);
   const result = await listCandidates(filters);
 
+  // Unchanged from the previous implementation: same parameter names (`q`,
+  // `pageSize`, `page`), same omission rules, same defaults.
   const pageLink = (page: number): string => {
     const query = new URLSearchParams();
     if (filters.search) query.set("q", filters.search);
@@ -39,127 +43,138 @@ export default async function CandidatesPage({
   const last = Math.min(result.page * result.pageSize, result.total);
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Candidates</h1>
-        <div className="flex gap-3 text-sm">
-          <Link href="/admin/attempts" className="underline">
+    <PageBody>
+      <PageHeader
+        title="Candidates"
+        description="Registrations synchronized from the Google Form. This page is read-only."
+        actions={
+          <Link
+            href="/admin/attempts"
+            className={buttonClass("secondary")}
+          >
+            <ClipboardList aria-hidden="true" className="size-4" />
             Attempts
           </Link>
-          <Link href="/admin" className="underline">
-            Admin home
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
-      <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-        Registrations synchronized from the Google Form. This page is read-only.
-      </p>
+      <FilterBar resetHref="/admin/candidates">
+        <SearchField
+          id="candidates-search"
+          name="q"
+          label="Search"
+          defaultValue={filters.search}
+          // Names the three fields the query layer actually searches. No other
+          // field is searchable, and none is claimed here.
+          placeholder="Name, email or mobile"
+        />
+        <SelectField
+          id="candidates-page-size"
+          name="pageSize"
+          label="Per page"
+          value={String(filters.pageSize)}
+          options={PAGE_SIZES.map((size) => [String(size), String(size)] as [string, string])}
+        />
+      </FilterBar>
 
-      {/* GET form: submitting always lands on page 1, and the resulting URL is
-          shareable and refreshable. */}
-      <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
-        <label className="text-sm">
-          <span className="text-black/60 dark:text-white/60">Search</span>
-          <input
-            type="search"
-            name="q"
-            defaultValue={filters.search}
-            placeholder="Name, email or mobile"
-            className={`${FIELD} w-72`}
+      <div className="mt-6">
+        {result.total === 0 ? (
+          <EmptyState
+            icon={<Users aria-hidden="true" className="size-6" />}
+            title={filters.search ? "No candidates match your search" : "No candidates yet"}
+            body={
+              filters.search
+                ? "Try a different name, email or mobile number."
+                : "Candidates appear here once the Google Form sync runs."
+            }
+            action={
+              filters.search ? (
+                <Link
+                  href="/admin/candidates"
+                  className={buttonClass("secondary")}
+                >
+                  Reset search
+                </Link>
+              ) : null
+            }
           />
-        </label>
-
-        <label className="text-sm">
-          <span className="text-black/60 dark:text-white/60">Per page</span>
-          <select name="pageSize" defaultValue={String(filters.pageSize)} className={FIELD}>
-            {PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          type="submit"
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-        >
-          Apply
-        </button>
-        <Link
-          href="/admin/candidates"
-          className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-        >
-          Reset
-        </Link>
-      </form>
-
-      <p className="mt-6 text-sm text-black/60 dark:text-white/60">
-        {result.total === 0
-          ? filters.search
-            ? "No candidates match your search."
-            : "No candidates found."
-          : `Showing ${first}–${last} of ${result.total} candidate${result.total === 1 ? "" : "s"}`}
-      </p>
-
-      {result.total > 0 ? (
-        <>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+        ) : (
+          <>
+            <TableContainer label="Candidates table" minWidth={920}>
               <thead>
                 <tr>
-                  {["Name", "Email", "Mobile", "Registered", "Updated", "Attempts", ""].map((header) => (
-                    <th key={header} className={`${CELL} font-medium`}>
-                      {header}
-                    </th>
-                  ))}
+                  <Th>Candidate</Th>
+                  <Th>Mobile</Th>
+                  <Th>Registered</Th>
+                  <Th>Updated</Th>
+                  <Th align="right">Attempts</Th>
+                  <Th align="right">View</Th>
                 </tr>
               </thead>
               <tbody>
                 {result.candidates.map((candidate) => (
-                  <tr key={candidate.id}>
-                    <td className={CELL}>{candidate.name}</td>
-                    <td className={CELL}>{candidate.email}</td>
-                    <td className={CELL}>{candidate.mobile}</td>
-                    <td className={CELL}>{formatDate(candidate.registeredAt)}</td>
-                    <td className={CELL}>{formatDate(candidate.updatedAt)}</td>
-                    <td className={CELL}>{candidate.attemptCount}</td>
-                    <td className={CELL}>
+                  <Tr key={candidate.id}>
+                    {/* Name and email form one identity cell: the name anchors
+                        the row, the email supports it. This groups two columns
+                        that previously carried equal weight. */}
+                    <Td>
+                      {/* Capped so one very long address cannot stretch the
+                          identity column and push every later column away.
+                          `break-all` keeps the overflow inside the cell. */}
+                      <div className="max-w-[360px]">
+                        <span className="font-medium text-ink">{candidate.name}</span>
+                        <span className="block text-xs break-all text-muted">{candidate.email}</span>
+                      </div>
+                    </Td>
+                    <Td className="text-ink-secondary tabular whitespace-nowrap">
+                      {candidate.mobile}
+                    </Td>
+                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                      {formatDate(candidate.registeredAt)}
+                    </Td>
+                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                      {formatDate(candidate.updatedAt)}
+                    </Td>
+                    {/* A count, not a status: the query provides no attempt
+                        state, so none is implied. Zero is muted so the rows
+                        that have attempts stand out. */}
+                    <Td align="right">
+                      <span
+                        className={
+                          candidate.attemptCount === 0
+                            ? "tabular text-disabled"
+                            : "tabular font-medium text-ink"
+                        }
+                      >
+                        {candidate.attemptCount}
+                      </span>
+                    </Td>
+                    <Td align="right">
+                      {/* `aria-label` rather than an `sr-only` span: an
+                          absolutely-positioned span inside the scroll
+                          container escapes it and pans the whole page. */}
                       <Link
                         href={`/admin/attempts?candidate=${encodeURIComponent(candidate.id)}`}
-                        className="underline"
+                        aria-label={`View attempts for ${candidate.name}`}
+                        className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
                       >
                         View attempts
                       </Link>
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </TableContainer>
 
-          <nav className="mt-4 flex items-center gap-3 text-sm">
-            {result.page > 1 ? (
-              <Link href={pageLink(result.page - 1)} className="underline">
-                Previous
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Previous</span>
-            )}
-            <span>
-              Page {result.page} of {result.totalPages}
-            </span>
-            {result.page < result.totalPages ? (
-              <Link href={pageLink(result.page + 1)} className="underline">
-                Next
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Next</span>
-            )}
-          </nav>
-        </>
-      ) : null}
-    </main>
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              hrefFor={pageLink}
+              summary={`Showing ${first}–${last} of ${result.total} candidate${result.total === 1 ? "" : "s"}`}
+            />
+          </>
+        )}
+      </div>
+    </PageBody>
   );
 }

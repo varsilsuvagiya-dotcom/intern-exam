@@ -1,40 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { FileQuestion, Upload } from "lucide-react";
 
+import {
+  DifficultyChip,
+  QuestionActiveBadge,
+  QuestionStatusBadge,
+} from "@/components/admin/question-status-badge";
+import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
+import { PageBody, PageHeader } from "@/components/layout/page-header";
+import { Chip } from "@/components/ui/badge";
+import { buttonClass } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
+import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { VALID_SECTIONS } from "@/lib/question-bank/csv-contract";
 import { PAGE_SIZES, listQuestions, parseFilters } from "@/lib/question-bank/query-questions";
 
 export const metadata: Metadata = { title: "Question bank" };
-
-const CELL = "border-b border-black/5 px-3 py-2 text-left align-top dark:border-white/10";
-const FIELD =
-  "mt-1 w-full rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20";
-
-function Select({
-  name,
-  label,
-  value,
-  options,
-}: {
-  name: string;
-  label: string;
-  value: string;
-  options: [string, string][];
-}) {
-  return (
-    <label className="text-sm">
-      <span className="text-black/60 dark:text-white/60">{label}</span>
-      <select name={name} defaultValue={value} className={FIELD}>
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 export default async function QuestionBankPage({
   searchParams,
@@ -47,6 +30,9 @@ export default async function QuestionBankPage({
   const filters = parseFilters(params);
   const result = await listQuestions(filters);
 
+  // Unchanged from the previous implementation: same parameter names, same
+  // omission rules, same defaults. Renaming any of these would break existing
+  // bookmarked views.
   const pageLink = (page: number): string => {
     const query = new URLSearchParams();
     if (filters.search) query.set("search", filters.search);
@@ -63,41 +49,52 @@ export default async function QuestionBankPage({
   const first = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
   const last = Math.min(result.page * result.pageSize, result.total);
 
+  const filtered =
+    Boolean(filters.search) ||
+    filters.section !== null ||
+    filters.difficulty !== null ||
+    filters.status !== null ||
+    filters.active !== null ||
+    filters.scored !== null;
+
   return (
-    <main className="mx-auto w-full max-w-7xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Question bank</h1>
-        <div className="flex gap-3 text-sm">
-          <Link href="/admin/questions/import" className="underline">
+    <PageBody>
+      <PageHeader
+        title="Question bank"
+        description="Manage, review and control the questions available for exams."
+        actions={
+          <Link
+            href="/admin/questions/import"
+            className={buttonClass("secondary")}
+          >
+            <Upload aria-hidden="true" className="size-4" />
             Import CSV
           </Link>
-          <Link href="/admin" className="underline">
-            Admin home
-          </Link>
-        </div>
-      </div>
+        }
+      />
 
-      {/* GET form: filters live in the URL, so the view is refreshable and
-          shareable, and submitting always lands on page 1. */}
-      <form method="get" className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-7">
-        <label className="col-span-2 text-sm">
-          <span className="text-black/60 dark:text-white/60">Search</span>
-          <input
-            type="search"
-            name="search"
-            defaultValue={filters.search}
-            placeholder="ID, question or topic"
-            className={FIELD}
-          />
-        </label>
-
-        <Select
+      <FilterBar resetHref="/admin/questions">
+        <SearchField
+          id="questions-search"
+          name="search"
+          label="Search"
+          defaultValue={filters.search}
+          placeholder="ID, question text or topic"
+        />
+        <SelectField
+          id="questions-section"
           name="section"
           label="Section"
           value={filters.section === null ? "" : String(filters.section)}
-          options={[["", "All"], ...VALID_SECTIONS.map((s) => [String(s), String(s)] as [string, string])]}
+          options={[
+            ["", "All"],
+            // Sections are numbered, not named, in the data. No names are
+            // invented here.
+            ...VALID_SECTIONS.map((s) => [String(s), `Section ${s}`] as [string, string]),
+          ]}
         />
-        <Select
+        <SelectField
+          id="questions-difficulty"
           name="difficulty"
           label="Difficulty"
           value={filters.difficulty ?? ""}
@@ -108,7 +105,8 @@ export default async function QuestionBankPage({
             ["hard", "Hard"],
           ]}
         />
-        <Select
+        <SelectField
+          id="questions-status"
           name="status"
           label="Status"
           value={filters.status ?? ""}
@@ -119,7 +117,8 @@ export default async function QuestionBankPage({
             ["ready", "Ready"],
           ]}
         />
-        <Select
+        <SelectField
+          id="questions-active"
           name="active"
           label="Active"
           value={filters.active === null ? "" : filters.active ? "active" : "inactive"}
@@ -129,7 +128,8 @@ export default async function QuestionBankPage({
             ["inactive", "Inactive"],
           ]}
         />
-        <Select
+        <SelectField
+          id="questions-scored"
           name="scored"
           label="Scored"
           value={filters.scored === null ? "" : filters.scored ? "scored" : "unscored"}
@@ -139,102 +139,126 @@ export default async function QuestionBankPage({
             ["unscored", "Unscored"],
           ]}
         />
-
-        <Select
+        <SelectField
+          id="questions-page-size"
           name="pageSize"
           label="Per page"
           value={String(filters.pageSize)}
           options={PAGE_SIZES.map((size) => [String(size), String(size)] as [string, string])}
         />
+      </FilterBar>
 
-        <div className="col-span-2 flex items-end gap-2 md:col-span-1">
-          <button
-            type="submit"
-            className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-          >
-            Apply
-          </button>
-          <Link
-            href="/admin/questions"
-            className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-          >
-            Reset
-          </Link>
-        </div>
-      </form>
-
-      <p className="mt-6 text-sm text-black/60 dark:text-white/60">
-        {result.total === 0
-          ? "No questions match these filters."
-          : `Showing ${first}–${last} of ${result.total} question${result.total === 1 ? "" : "s"}`}
-      </p>
-
-      {result.total > 0 ? (
-        <>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+      <div className="mt-6">
+        {result.total === 0 ? (
+          <EmptyState
+            icon={<FileQuestion aria-hidden="true" className="size-6" />}
+            title={filtered ? "No questions match the current filters" : "No questions yet"}
+            body={
+              filtered
+                ? "Try widening your search, or clearing the section and difficulty filters."
+                : "Import a question CSV to populate the bank."
+            }
+            action={
+              filtered ? (
+                <Link
+                  href="/admin/questions"
+                  className={buttonClass("secondary")}
+                >
+                  Reset filters
+                </Link>
+              ) : null
+            }
+          />
+        ) : (
+          <>
+            <TableContainer label="Question bank table" minWidth={1080}>
               <thead>
                 <tr>
-                  {["ID", "Sec", "Topic", "Question", "Lesson", "Difficulty", "Marks", "Scored", "Status", "Active", ""].map(
-                    (header) => (
-                      <th key={header} className={`${CELL} font-medium`}>
-                        {header}
-                      </th>
-                    ),
-                  )}
+                  <Th>Question</Th>
+                  <Th>Section</Th>
+                  <Th>Difficulty</Th>
+                  <Th>Status</Th>
+                  <Th>Active</Th>
+                  <Th align="right">Marks</Th>
+                  <Th align="right">Edit</Th>
                 </tr>
               </thead>
               <tbody>
                 {result.questions.map((question) => (
-                  <tr key={question.id}>
-                    <td className={CELL}>{question.id}</td>
-                    <td className={CELL}>{question.section}</td>
-                    <td className={CELL}>{question.topic}</td>
-                    <td className={`${CELL} max-w-sm truncate`} title={question.question}>
-                      {question.question}
-                    </td>
-                    <td className={CELL}>{question.lessonGroup ?? "—"}</td>
-                    <td className={CELL}>{question.difficulty}</td>
-                    <td className={CELL}>{question.marks}</td>
-                    <td className={CELL}>{question.scored ? "Yes" : "No"}</td>
-                    <td className={CELL}>{question.status}</td>
-                    <td className={CELL}>
-                      <span className={question.isActive ? "" : "text-black/40 dark:text-white/40"}>
-                        {question.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className={CELL}>
-                      <Link href={`/admin/questions/${encodeURIComponent(question.id)}`} className="underline">
+                  <Tr key={question.id}>
+                    {/* The primary column. Question text leads; id, topic and
+                        lesson group sit beneath it as quiet metadata, which
+                        removes four low-value columns from the old table. */}
+                    <Td className="align-top">
+                      <div className="max-w-[520px] min-w-[260px]">
+                        <p className="line-clamp-2 leading-5 font-medium text-ink">
+                          {question.question}
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                          <span className="tabular">{question.id}</span>
+                          <span aria-hidden="true">&middot;</span>
+                          <span>{question.topic}</span>
+                          {question.lessonGroup ? (
+                            <>
+                              <span aria-hidden="true">&middot;</span>
+                              <span>{question.lessonGroup}</span>
+                            </>
+                          ) : null}
+                          {/* Unscored is the exception worth surfacing;
+                              scored is the norm and stays silent. */}
+                          {question.scored ? null : (
+                            <>
+                              <span aria-hidden="true">&middot;</span>
+                              <span className="text-warning">Unscored</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </Td>
+                    <Td className="align-top">
+                      <Chip>{question.section}</Chip>
+                    </Td>
+                    <Td className="align-top">
+                      <DifficultyChip difficulty={question.difficulty} />
+                    </Td>
+                    <Td className="align-top">
+                      <QuestionStatusBadge status={question.status} />
+                    </Td>
+                    <Td className="align-top">
+                      <QuestionActiveBadge isActive={question.isActive} />
+                    </Td>
+                    <Td align="right" className="align-top text-ink-secondary tabular">
+                      {question.marks}
+                    </Td>
+                    <Td align="right" className="align-top">
+                      {/* Activation lives in the editor, where it always has.
+                          No new mutation is introduced on this page. */}
+                      {/* The link is named by `aria-label` rather than by an
+                          `sr-only` span: an absolutely-positioned span inside
+                          the scroll container escapes it and pans the whole
+                          page sideways. */}
+                      <Link
+                        href={`/admin/questions/${encodeURIComponent(question.id)}`}
+                        aria-label={`Open question ${question.id}`}
+                        className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
+                      >
                         Open
                       </Link>
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </TableContainer>
 
-          <nav className="mt-4 flex items-center gap-3 text-sm">
-            {result.page > 1 ? (
-              <Link href={pageLink(result.page - 1)} className="underline">
-                Previous
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Previous</span>
-            )}
-            <span>
-              Page {result.page} of {result.totalPages}
-            </span>
-            {result.page < result.totalPages ? (
-              <Link href={pageLink(result.page + 1)} className="underline">
-                Next
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Next</span>
-            )}
-          </nav>
-        </>
-      ) : null}
-    </main>
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              hrefFor={pageLink}
+              summary={`Showing ${first}–${last} of ${result.total} question${result.total === 1 ? "" : "s"}`}
+            />
+          </>
+        )}
+      </div>
+    </PageBody>
   );
 }

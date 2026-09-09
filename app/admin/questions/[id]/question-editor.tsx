@@ -1,6 +1,14 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
+
+import { AlertTriangle, Save } from "lucide-react";
+
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input, ReadOnlyValue, Select, Textarea } from "@/components/ui/field";
+import { useActionToast } from "@/components/ui/toast";
 
 import { saveQuestion, toggleActive, type EditState } from "./actions";
 
@@ -27,24 +35,149 @@ export type EditableQuestion = {
   isActive: boolean;
 };
 
-const FIELD =
-  "mt-1 w-full rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm dark:border-white/20";
-const LABEL = "block text-sm font-medium";
+/// Section 7 must carry a lesson; section 8 is never scored. Both rules are
+/// enforced on the server — these constants only let the form show the right
+/// fields, never decide whether a submission is valid.
+const LESSON_SECTION = 7;
+const UNSCORED_SECTION = 8;
 
+const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
+type OptionLetter = (typeof OPTION_LETTERS)[number];
+
+/// The exam blueprint's marks per question, shown as guidance beside the marks
+/// field. Deliberately not enforced: the server validates marks against
+/// `scored`, not against the section, and tightening that here would be a
+/// business-rule change rather than a redesign.
+const BLUEPRINT_MARKS: Record<number, string> = {
+  1: "1",
+  2: "1",
+  3: "1",
+  4: "1.5",
+  5: "1.5",
+  6: "2",
+  7: "2.5",
+  8: "0",
+};
+
+const SECTION_NAMES: Record<number, string> = {
+  1: "Logic & Patterns",
+  2: "Number Reasoning",
+  3: "Programming Fundamentals",
+  4: "Output Prediction",
+  5: "Debugging",
+  6: "Steps Problem Solving",
+  7: "Learn-and-Apply",
+  8: "Attitude",
+};
+
+/// One labelled control with its helper text and its error.
+///
+/// The error is wired to the control through `aria-describedby` rather than
+/// merely sitting near it, so a screen reader user hears why the field is
+/// rejected instead of finding an unexplained invalid state.
 function Field({
+  id,
   label,
-  children,
+  hint,
   error,
+  required,
+  children,
 }: {
+  id: string;
   label: string;
-  children: React.ReactNode;
+  hint?: string;
   error?: string;
+  required?: boolean;
+  children: (props: { id: string; describedBy?: string; invalid: boolean }) => React.ReactNode;
+}) {
+  const hintId = hint ? `${id}-hint` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [hintId, errorId].filter(Boolean).join(" ") || undefined;
+
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-[13px] font-medium text-ink">
+        {label}
+        {required ? (
+          <span className="ml-1 text-danger" aria-hidden="true">
+            *
+          </span>
+        ) : null}
+      </label>
+
+      {hint ? (
+        <p id={hintId} className="mt-0.5 text-xs text-muted">
+          {hint}
+        </p>
+      ) : null}
+
+      <div className="mt-1.5">{children({ id, describedBy, invalid: Boolean(error) })}</div>
+
+      {/* Never colour alone: the message is text, and it is announced. */}
+      {error ? (
+        <p id={errorId} className="mt-1.5 flex gap-1.5 text-[13px] text-danger">
+          <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span>{error}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/// A titled group of related fields. Replaces the old flat list, where identity,
+/// content, options, scoring and verification all sat at one level.
+function Group({
+  title,
+  description,
+  children,
+  className = "",
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <label className={LABEL}>
-      {label}
-      {children}
-      {error ? <span className="mt-1 block text-sm font-normal text-red-600 dark:text-red-400">{error}</span> : null}
+    <fieldset className={`rounded-lg border border-line bg-surface p-4 lg:p-5 ${className}`}>
+      <legend className="px-1 text-[13px] font-semibold text-ink">{title}</legend>
+      {description ? <p className="mt-1 text-xs text-muted">{description}</p> : null}
+      <div className="mt-4 space-y-4">{children}</div>
+    </fieldset>
+  );
+}
+
+function Checkbox({
+  name,
+  label,
+  hint,
+  defaultChecked,
+  checked,
+  onChange,
+  disabled,
+}: {
+  name: string;
+  label: string;
+  hint?: string;
+  defaultChecked?: boolean;
+  checked?: boolean;
+  onChange?: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex gap-2.5">
+      <input
+        type="checkbox"
+        name={name}
+        defaultChecked={defaultChecked}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange ? (event) => onChange(event.target.checked) : undefined}
+        className="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)] disabled:cursor-not-allowed"
+      />
+      <span className="min-w-0">
+        <span className="block text-sm text-ink">{label}</span>
+        {hint ? <span className="mt-0.5 block text-xs text-muted">{hint}</span> : null}
+      </span>
     </label>
   );
 }
@@ -56,204 +189,536 @@ export function QuestionEditor({
   question: EditableQuestion;
   sections: readonly number[];
 }) {
-  const [state, save, saving] = useActionState<EditState, FormData>(saveQuestion, { status: "idle" });
+  const [state, save, saving] = useActionState<EditState, FormData>(saveQuestion, {
+    status: "idle",
+  });
   const [activeState, changeActive, changingActive] = useActionState<EditState, FormData>(
     toggleActive,
     { status: "idle" },
   );
   const [confirming, setConfirming] = useState(false);
 
+  // Mirrored so the form can show the right fields as the admin works. The
+  // submitted values are what the server validates; this only drives display.
+  const [section, setSection] = useState(question.section);
+  const [scored, setScored] = useState(question.scored);
+  const [correct, setCorrect] = useState(question.correct);
+  const [options, setOptions] = useState({
+    A: question.optionA,
+    B: question.optionB,
+    C: question.optionC,
+    D: question.optionD,
+  });
+
+  const uid = useId();
+  const fieldId = (name: string) => `${uid}-${name}`;
+
   const errorFor = (field: string): string | undefined =>
-    state.status === "error" ? state.errors.find((error) => error.field === field)?.message : undefined;
+    state.status === "error"
+      ? state.errors.find((error) => error.field === field)?.message
+      : undefined;
 
   const formError = errorFor("form");
+  const failed = state.status === "error";
+
+  // Success and failure both come from the action's own returned state, so a
+  // toast can never fire without a real result behind it.
+  useActionToast(state, (current) =>
+    current.status === "saved" ? { tone: "success", message: "Question saved." } : null,
+  );
+  useActionToast(activeState, (current) =>
+    current.status === "saved"
+      ? {
+          tone: "success",
+          message: question.isActive ? "Question deactivated." : "Question activated.",
+        }
+      : null,
+  );
+
+  const isLesson = section === LESSON_SECTION;
+  const isUnscored = section === UNSCORED_SECTION;
+  // Lesson values on a non-7 question are shown rather than silently dropped:
+  // hiding a field that still holds data is how data goes missing unnoticed.
+  const strayLesson = !isLesson && Boolean(question.lessonText || question.lessonGroup);
 
   return (
-    <div className="mt-8 space-y-8">
-      <form action={save} className="space-y-4">
+    <div className="space-y-6">
+      {/* True, load-bearing, and previously only implicit. */}
+      <Alert tone="info">
+        Editing a question does not change papers candidates have already sat. Attempts keep their
+        own snapshot of every question as it was drawn.
+      </Alert>
+
+      <form action={save} className="space-y-4" noValidate>
         <input type="hidden" name="id" value={question.id} />
 
-        <Field label="Question ID">
-          {/* Identity is fixed: historical attempts and CSV re-imports both key
-              off this value, so it is shown read-only and never submitted. */}
-          <input value={question.id} readOnly disabled className={`${FIELD} opacity-60`} />
-          <span className="mt-1 block text-sm font-normal text-black/50 dark:text-white/50">
-            The question ID cannot be changed.
-          </span>
-        </Field>
-
-        <div className="grid grid-cols-3 gap-4">
-          <Field label="Section" error={errorFor("section")}>
-            <select name="section" defaultValue={String(question.section)} className={FIELD}>
-              {sections.map((section) => (
-                <option key={section} value={section}>
-                  {section}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Difficulty" error={errorFor("difficulty")}>
-            <select name="difficulty" defaultValue={question.difficulty} className={FIELD}>
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </Field>
-
-          <Field label="Status" error={errorFor("status")}>
-            <select name="status" defaultValue={question.status} className={FIELD}>
-              <option value="draft">Draft</option>
-              <option value="review">Review</option>
-              <option value="ready">Ready</option>
-            </select>
-          </Field>
-        </div>
-
-        <Field label="Topic" error={errorFor("topic")}>
-          <input name="topic" defaultValue={question.topic} className={FIELD} />
-        </Field>
-
-        <Field label="Question" error={errorFor("question")}>
-          <textarea name="question" defaultValue={question.question} rows={3} className={FIELD} />
-        </Field>
-
-        <Field label="Code block" error={errorFor("codeBlock")}>
-          <textarea
-            name="codeBlock"
-            defaultValue={question.codeBlock}
-            rows={4}
-            className={`${FIELD} font-mono`}
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-4">
-          {(["A", "B", "C", "D"] as const).map((letter) => {
-            const name = `option${letter}` as const;
-            return (
-              <Field key={letter} label={`Option ${letter}`} error={errorFor(name)}>
-                <input name={name} defaultValue={question[name]} className={FIELD} />
-              </Field>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Correct answer" error={errorFor("correct")}>
-            <select name="correct" defaultValue={question.correct} className={FIELD}>
-              {["a", "b", "c", "d"].map((option) => (
-                <option key={option} value={option}>
-                  {option.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Marks" error={errorFor("marks")}>
-            <input name="marks" defaultValue={question.marks} inputMode="decimal" className={FIELD} />
-          </Field>
-        </div>
-
-        <Field label="Explanation" error={errorFor("explanation")}>
-          <textarea name="explanation" defaultValue={question.explanation} rows={2} className={FIELD} />
-        </Field>
-
-        <Field label="Lesson text (section 7)" error={errorFor("lessonText")}>
-          <textarea name="lessonText" defaultValue={question.lessonText} rows={3} className={FIELD} />
-        </Field>
-
-        <Field label="Lesson group (section 7)" error={errorFor("lessonGroup")}>
-          <input name="lessonGroup" defaultValue={question.lessonGroup} className={FIELD} />
-        </Field>
-
-        <fieldset className="flex flex-wrap gap-6">
-          {(
-            [
-              ["scored", "Scored", question.scored],
-              ["aiVerified", "AI verified", question.aiVerified],
-              ["trainerVerified", "Trainer verified", question.trainerVerified],
-              ["isActive", "Active", question.isActive],
-            ] as const
-          ).map(([name, label, checked]) => (
-            <label key={name} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name={name} defaultChecked={checked} />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-
-        {errorFor("scored") ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{errorFor("scored")}</p>
-        ) : null}
-        {formError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{formError}</p> : null}
-
-        {state.status === "error" && !formError ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            Nothing was saved. Fix the highlighted fields and try again.
-          </p>
+        {/* Errors are reported once at the top as well as at each field, so a
+            failure is visible without hunting down a long form. */}
+        {failed ? (
+          <Alert tone="danger" title="Nothing was saved">
+            {formError ?? "Fix the highlighted fields below and save again."}
+          </Alert>
         ) : null}
 
-        {state.status === "saved" ? (
-          <p role="status" className="text-sm text-green-700 dark:text-green-400">
-            Question saved.
-          </p>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+        <Group
+          title="Identity"
+          description="How this question is filed. The ID is fixed; everything else here is editable."
         >
-          {saving ? "Saving…" : "Save changes"}
-        </button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              id={fieldId("id")}
+              label="Question ID"
+              hint="Fixed. Historical attempts and CSV re-imports both key off this value."
+            >
+              {({ id }) => (
+                <ReadOnlyValue className="font-mono text-xs">
+                  <span id={id} className="truncate" title={question.id}>
+                    {question.id}
+                  </span>
+                </ReadOnlyValue>
+              )}
+            </Field>
+
+            <Field
+              id={fieldId("topic")}
+              label="Topic"
+              required
+              error={errorFor("topic")}
+              hint="At most 200 characters."
+            >
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  name="topic"
+                  defaultValue={question.topic}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                />
+              )}
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field id={fieldId("section")} label="Section" required error={errorFor("section")}>
+              {({ id, describedBy, invalid }) => (
+                <Select
+                  id={id}
+                  name="section"
+                  value={String(section)}
+                  onChange={(event) => setSection(Number(event.target.value))}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                >
+                  {sections.map((value) => (
+                    <option key={value} value={value}>
+                      {value} — {SECTION_NAMES[value] ?? "Section"}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+
+            <Field
+              id={fieldId("difficulty")}
+              label="Difficulty"
+              required
+              error={errorFor("difficulty")}
+            >
+              {({ id, describedBy, invalid }) => (
+                <Select
+                  id={id}
+                  name="difficulty"
+                  defaultValue={question.difficulty}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                >
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </Select>
+              )}
+            </Field>
+
+            {/* Status is the authoring workflow. Whether the question may be
+                drawn into a paper is `isActive`, below — a separate concept,
+                deliberately not merged into this control. */}
+            <Field
+              id={fieldId("status")}
+              label="Status"
+              required
+              error={errorFor("status")}
+              hint="Authoring workflow only."
+            >
+              {({ id, describedBy, invalid }) => (
+                <Select
+                  id={id}
+                  name="status"
+                  defaultValue={question.status}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="review">Review</option>
+                  <option value="ready">Ready</option>
+                </Select>
+              )}
+            </Field>
+          </div>
+        </Group>
+
+        <Group title="Question">
+          <Field id={fieldId("question")} label="Question text" required error={errorFor("question")}>
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                name="question"
+                defaultValue={question.question}
+                rows={5}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                className="min-h-[7.5rem] leading-6"
+              />
+            )}
+          </Field>
+
+          <Field
+            id={fieldId("codeBlock")}
+            label="Code block"
+            hint="Optional. Shown to the candidate as a code block, exactly as typed."
+            error={errorFor("codeBlock")}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                name="codeBlock"
+                defaultValue={question.codeBlock}
+                rows={10}
+                spellCheck={false}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                className="font-mono text-xs leading-5"
+              />
+            )}
+          </Field>
+        </Group>
+
+        <Group
+          title="Options and correct answer"
+          description="The correct answer is chosen by the radio beside each option, so it can never drift from the option text it belongs to."
+        >
+          {errorFor("correct") ? (
+            <p className="flex gap-1.5 text-[13px] text-danger">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              <span>{errorFor("correct")}</span>
+            </p>
+          ) : null}
+
+          {/* One radiogroup over the four options. Selecting the correct answer
+              is a choice *among the options themselves* rather than a separate
+              letter dropdown, which is what made picking the wrong letter easy. */}
+          <div
+            role="radiogroup"
+            aria-label="Correct answer"
+            className="space-y-3 md:space-y-2"
+          >
+            {OPTION_LETTERS.map((letter) => {
+              const name = `option${letter}` as `option${OptionLetter}`;
+              const key = letter.toLowerCase();
+              const selected = correct === key;
+              const error = errorFor(name);
+
+              return (
+                <div
+                  key={letter}
+                  className={[
+                    "rounded-md border p-3 transition-colors duration-[120ms]",
+                    selected ? "border-primary-border bg-primary-subtle" : "border-line bg-surface",
+                  ].join(" ")}
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="correct"
+                        value={key}
+                        checked={selected}
+                        onChange={() => setCorrect(key)}
+                        className="size-4 accent-[var(--color-primary)]"
+                      />
+                      <span className="text-sm font-medium text-ink">Option {letter}</span>
+                    </label>
+
+                    {/* Stated in words, not by tint alone. */}
+                    {selected ? <Badge tone="success">Correct answer</Badge> : null}
+                  </div>
+
+                  <div className="mt-2">
+                    <label htmlFor={fieldId(name)} className="sr-only">
+                      Option {letter} text
+                    </label>
+                    <Textarea
+                      id={fieldId(name)}
+                      name={name}
+                      value={options[letter]}
+                      onChange={(event) =>
+                        setOptions((current) => ({ ...current, [letter]: event.target.value }))
+                      }
+                      rows={3}
+                      aria-describedby={error ? `${fieldId(name)}-error` : undefined}
+                      invalid={Boolean(error)}
+                    />
+                    {error ? (
+                      <p
+                        id={`${fieldId(name)}-error`}
+                        className="mt-1.5 flex gap-1.5 text-[13px] text-danger"
+                      >
+                        <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                        <span>{error}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Group>
+
+        <Group
+          title="Explanation"
+          description="Shown only in admin result review. Candidates never see it."
+        >
+          <Field id={fieldId("explanation")} label="Explanation" error={errorFor("explanation")}>
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                name="explanation"
+                defaultValue={question.explanation}
+                rows={4}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                className="min-h-[6rem] leading-6"
+              />
+            )}
+          </Field>
+        </Group>
+
+        {/* Rendered only for section 7, or when a non-7 question still carries
+            lesson data. In the latter case the inputs stay mounted so saving
+            cannot quietly blank values the form is not showing. */}
+        {isLesson || strayLesson ? (
+          <Group
+            title="Section 7 — Learn-and-Apply"
+            description="Section 7 is drawn as whole lessons: the lesson text is shown once above the three questions that share its group."
+            className={isLesson ? "border-primary-border bg-primary-subtle/40" : ""}
+          >
+            {strayLesson ? (
+              <Alert tone="warning">
+                This question is in section {section} but still carries lesson data. It is shown
+                here so it is not lost; clear both fields if it does not belong to a lesson.
+              </Alert>
+            ) : null}
+
+            <Field
+              id={fieldId("lessonGroup")}
+              label="Lesson group"
+              required={isLesson}
+              error={errorFor("lessonGroup")}
+              hint="The identifier shared by the questions drawn together as one lesson."
+            >
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  name="lessonGroup"
+                  defaultValue={question.lessonGroup}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                />
+              )}
+            </Field>
+
+            <Field
+              id={fieldId("lessonText")}
+              label="Lesson text"
+              required={isLesson}
+              error={errorFor("lessonText")}
+              hint="Shown once above every question in this lesson group."
+            >
+              {({ id, describedBy, invalid }) => (
+                <Textarea
+                  id={id}
+                  name="lessonText"
+                  defaultValue={question.lessonText}
+                  rows={6}
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  className="min-h-[9rem] leading-6"
+                />
+              )}
+            </Field>
+          </Group>
+        ) : (
+          // Not rendered as fields, but still submitted, so switching a question
+          // to another section does not silently erase its lesson content.
+          <>
+            <input type="hidden" name="lessonGroup" value={question.lessonGroup} />
+            <input type="hidden" name="lessonText" value={question.lessonText} />
+          </>
+        )}
+
+        <Group title="Scoring">
+          {isUnscored ? (
+            <Alert tone="info">
+              Section {UNSCORED_SECTION} is stored for review but never scored, so it must be
+              unscored with marks of 0.
+            </Alert>
+          ) : null}
+
+          <Checkbox
+            name="scored"
+            label="Scored"
+            hint={
+              isUnscored
+                ? `Section ${UNSCORED_SECTION} questions cannot be scored.`
+                : "Unscored questions must have marks of 0; scored questions must have marks above 0."
+            }
+            checked={isUnscored ? false : scored}
+            onChange={setScored}
+          />
+          {errorFor("scored") ? (
+            <p className="flex gap-1.5 text-[13px] text-danger">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              <span>{errorFor("scored")}</span>
+            </p>
+          ) : null}
+
+          <div className="sm:max-w-[220px]">
+            <Field
+              id={fieldId("marks")}
+              label="Marks"
+              required
+              error={errorFor("marks")}
+              hint={
+                BLUEPRINT_MARKS[section]
+                  ? `The exam blueprint uses ${BLUEPRINT_MARKS[section]} for section ${section}.`
+                  : undefined
+              }
+            >
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  name="marks"
+                  defaultValue={question.marks}
+                  inputMode="decimal"
+                  aria-describedby={describedBy}
+                  invalid={invalid}
+                  className="tabular"
+                />
+              )}
+            </Field>
+          </div>
+        </Group>
+
+        <Group
+          title="Verification"
+          description="Review flags. Neither affects whether the question can be drawn into a paper."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Checkbox name="aiVerified" label="AI verified" defaultChecked={question.aiVerified} />
+            <Checkbox
+              name="trainerVerified"
+              label="Trainer verified"
+              defaultChecked={question.trainerVerified}
+            />
+          </div>
+        </Group>
+
+        {/* `isActive` is owned by the activation block below, but the save
+            action validates the whole question, so the current value travels
+            with the form rather than being reset by a save. */}
+        <input type="hidden" name="isActive" value={String(question.isActive)} />
+
+        {/* Reachable without scrolling to the end of a long form. */}
+        <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-page/95 px-4 py-3 backdrop-blur-sm lg:-mx-6 lg:px-6">
+          <Button
+            type="submit"
+            variant="primary"
+            loading={saving}
+            loadingLabel="Saving…"
+            icon={<Save aria-hidden="true" className="size-4" />}
+          >
+            Save changes
+          </Button>
+
+          <p aria-live="polite" className="text-[13px] text-muted">
+            {saving
+              ? "Saving…"
+              : failed
+                ? "Not saved — see the errors above."
+                : state.status === "saved"
+                  ? "All changes saved."
+                  : ""}
+          </p>
+        </div>
       </form>
 
-      <section className="rounded-lg border border-black/10 p-4 dark:border-white/15">
-        <h2 className="text-sm font-semibold">
-          {question.isActive ? "Deactivate this question" : "Activate this question"}
+      {/* Deactivation is a flag, never a delete. There is no delete action on
+          this page and none may be added. */}
+      <section className="rounded-lg border border-warning/30 bg-warning-bg p-4 lg:p-5">
+        <h2 className="text-[13px] font-semibold text-ink">
+          {question.isActive ? "Deactivate question" : "Activate question"}
         </h2>
+        <p className="mt-1 text-[13px] text-ink-secondary">
+          {question.isActive
+            ? "A deactivated question stays in the bank and in every historical attempt, but is no longer drawn into new papers."
+            : "An active question can be drawn into new papers again."}
+        </p>
+
+        <div className="mt-3">
+          <Badge tone={question.isActive ? "success" : "warning"}>
+            Currently {question.isActive ? "active" : "inactive"}
+          </Badge>
+        </div>
+
+        {activeState.status === "error" ? (
+          <Alert tone="danger" className="mt-3">
+            {activeState.errors[0]?.message ?? "The change could not be saved."}
+          </Alert>
+        ) : null}
 
         {confirming ? (
-          <form action={changeActive} className="mt-2">
+          <form action={changeActive} className="mt-4">
             <input type="hidden" name="id" value={question.id} />
             <input type="hidden" name="isActive" value={String(!question.isActive)} />
-            <p className="text-sm text-black/70 dark:text-white/70">
+            <p className="text-[13px] text-ink">
               {question.isActive
-                ? `Deactivate ${question.id}? It stays in the question bank and in historical exam records, but will no longer be treated as active for future exam selection.`
-                : `Activate ${question.id}? It will be treated as active for future exam selection again.`}
+                ? `Deactivate ${question.id}?`
+                : `Activate ${question.id}?`}
             </p>
-            <div className="mt-3 flex gap-2">
-              <button
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
                 type="submit"
-                disabled={changingActive}
-                className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                variant={question.isActive ? "destructive" : "primary"}
+                loading={changingActive}
+                loadingLabel="Saving…"
               >
-                {changingActive ? "Saving…" : question.isActive ? "Deactivate" : "Activate"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirming(false)}
-                className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-              >
+                {question.isActive ? "Deactivate" : "Activate"}
+              </Button>
+              <Button type="button" variant="tertiary" onClick={() => setConfirming(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         ) : (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            className="mt-2 rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-          >
-            {question.isActive ? "Deactivate" : "Activate"}
-          </button>
+          <div className="mt-4">
+            <Button
+              type="button"
+              variant={question.isActive ? "destructive" : "secondary"}
+              onClick={() => setConfirming(true)}
+            >
+              {question.isActive ? "Deactivate" : "Activate"}
+            </Button>
+          </div>
         )}
-
-        {activeState.status === "error" ? (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {activeState.errors[0]?.message}
-          </p>
-        ) : null}
       </section>
     </div>
   );

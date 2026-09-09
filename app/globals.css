@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Candidate-side foundation (unchanged).
+
+   The exam interface renders against these variables. They are deliberately
+   left exactly as they were, including the dark-mode block, so nothing on the
+   candidate side shifts while the admin panel is redesigned.
+   --------------------------------------------------------------------------- */
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -23,4 +31,147 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------------
+   CloudUS admin design tokens.
+
+   Registered with Tailwind's @theme so they are usable as utilities
+   (bg-surface, text-muted, rounded-lg, …) across the admin panel.
+
+   Light mode only, by design: the admin palette was specified for a fixed
+   office-desktop context, and the status colors would need a separately
+   designed dark set to stay accessible. See the design plan §6.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  /* Surfaces */
+  --color-page: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-subtle: #f1f3f6;
+  --color-inset: #edeff3;
+
+  /* Borders */
+  --color-line: #e3e6eb;
+  --color-line-strong: #cdd2da;
+
+  /* Text */
+  --color-ink: #14181f;
+  --color-ink-secondary: #4a5261;
+  --color-muted: #6b7383;
+  --color-disabled: #9aa1ae;
+
+  /* Brand */
+  --color-primary: #1f5fbf;
+  --color-primary-hover: #1a4fa0;
+  --color-primary-active: #163f81;
+  --color-primary-subtle: #edf3fc;
+  --color-primary-border: #c3d6f2;
+
+  /* Status — each pairs a foreground with its own tinted background */
+  --color-success: #166534;
+  --color-success-bg: #e8f5ec;
+  --color-warning: #8a5300;
+  --color-warning-bg: #fdf3e2;
+  --color-danger: #a81e1e;
+  --color-danger-bg: #fdecec;
+  --color-info: #1a4fa0;
+  --color-info-bg: #edf3fc;
+  --color-neutral: #4a5261;
+  --color-neutral-bg: #f1f3f6;
+
+  /* Radius — capped at 8px; nothing in the admin panel is rounder */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Shadows. Cards and tables use none; only floating surfaces get one. */
+  --shadow-sm: 0 1px 2px rgba(20, 24, 31, 0.06);
+  --shadow-md: 0 4px 12px rgba(20, 24, 31, 0.1);
+  --shadow-lg: 0 12px 32px rgba(20, 24, 31, 0.16);
+
+  /* Breakpoints. sm is 480 rather than Tailwind's 640, matching the plan. */
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1440px;
+
+  /* Layout constants used by the shell */
+  --spacing-sidebar: 240px;
+  --spacing-rail: 56px;
+  --spacing-topbar: 56px;
+  --spacing-drawer: 280px;
+}
+
+/* ---------------------------------------------------------------------------
+   Admin scope.
+
+   Every admin surface renders inside `.cloudus-admin`, so these rules cannot
+   reach the candidate pages. This is what keeps the redesign from leaking.
+   --------------------------------------------------------------------------- */
+
+.cloudus-admin {
+  background: var(--color-page);
+  color: var(--color-ink);
+  /* Neutralises the inherited dark-mode body colors for admin routes only. */
+  color-scheme: light;
+}
+
+/* Score and count columns line up only with tabular figures. */
+.cloudus-admin .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One focus treatment everywhere. Focus is never removed, only restyled. */
+.cloudus-admin :focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Toast entrance. Motion-safe only; under reduced motion the toast simply
+   appears, and its lifetime is unchanged — shortening it would cost
+   information rather than reduce motion. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Navigation drawer slides in from the edge it is anchored to. */
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloudus-admin *,
+  .cloudus-admin *::before,
+  .cloudus-admin *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Indeterminate loader sweep. Used by the full-screen loading overlay; lives
+   here rather than in the admin scope because the overlay serves the
+   candidate routes too. */
+@keyframes loader-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }

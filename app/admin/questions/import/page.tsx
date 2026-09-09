@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 
+import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
+import { CsvReference } from "./csv-reference";
 import { ImportForm } from "./import-form";
 
 export const metadata: Metadata = { title: "Import questions" };
@@ -10,12 +12,20 @@ export default async function ImportQuestionsPage() {
   await requireAdmin();
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight">Import question bank</h1>
-      <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-        Upload a CSV to preview it. Nothing is written until you confirm.
-      </p>
+    <PageBody>
+      <PageHeader
+        breadcrumbs={[{ label: "Questions", href: "/admin/questions" }, { label: "Import CSV" }]}
+        title="Import question bank"
+        // The existing wording, kept: it states the one thing an admin most
+        // needs to know before uploading.
+        description="Upload a CSV to preview it. Nothing is written until you confirm."
+      />
+
+      <div className="mb-6">
+        <CsvReference />
+      </div>
+
       <ImportForm />
-    </main>
+    </PageBody>
   );
 }

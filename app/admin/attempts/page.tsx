@@ -1,69 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ClipboardList, Download, X } from "lucide-react";
 
+import { AttemptStatusBadge } from "@/components/admin/attempt-status-badge";
+import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
+import { ScoreCell } from "@/components/admin/score-cell";
+import { PageBody, PageHeader } from "@/components/layout/page-header";
+import { Alert } from "@/components/ui/alert";
+import { buttonClass } from "@/components/ui/button";
+import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
+import { Pagination } from "@/components/ui/pagination";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { PAGE_SIZES } from "@/lib/admin/query-candidates";
-import {
-  SORT_LABELS,
-  listAttempts,
-  parseAttemptFilters,
-  type AttemptScoring,
-} from "@/lib/admin/query-attempts";
+import { SORT_LABELS, listAttempts, parseAttemptFilters } from "@/lib/admin/query-attempts";
 
 export const metadata: Metadata = { title: "Attempts" };
 
 export const dynamic = "force-dynamic";
 
-const CELL = "border-b border-black/5 px-3 py-2 text-left align-top dark:border-white/10";
-const FIELD =
-  "mt-1 w-full rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm dark:border-white/20";
-
 function formatDate(value: Date | null): string {
   return value ? value.toISOString().slice(0, 16).replace("T", " ") : "—";
-}
-
-/// A score is only ever shown for an attempt that scoring has actually finished.
-/// The other two states say so plainly rather than showing a number that would
-/// be read as a final result.
-function ScoreCell({ scoring }: { scoring: AttemptScoring }) {
-  if (scoring.kind === "scored") {
-    return (
-      <span className="font-medium">
-        {scoring.totalScore} / {scoring.maxScore}
-      </span>
-    );
-  }
-
-  return (
-    <span className="text-black/50 dark:text-white/50">
-      {scoring.kind === "pending" ? "Scoring pending" : "Not finalized"}
-    </span>
-  );
-}
-
-function Select({
-  name,
-  label,
-  value,
-  options,
-}: {
-  name: string;
-  label: string;
-  value: string;
-  options: [string, string][];
-}) {
-  return (
-    <label className="text-sm">
-      <span className="text-black/60 dark:text-white/60">{label}</span>
-      <select name={name} defaultValue={value} className={FIELD}>
-        {options.map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
 }
 
 export default async function AttemptsPage({
@@ -104,74 +60,94 @@ export default async function AttemptsPage({
     }),
   ).toString();
 
-  return (
-    <main className="mx-auto w-full max-w-7xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Attempts</h1>
-        <div className="flex gap-3 text-sm">
-          <Link href="/admin/candidates" className="underline">
-            Candidates
-          </Link>
-          <Link href="/admin" className="underline">
-            Admin home
-          </Link>
-        </div>
-      </div>
+  // Carried into the result page so "Back to attempts" returns to this exact
+  // filtered view. Unchanged from the existing behaviour.
+  const backQuery = `?${new URLSearchParams(
+    Object.entries({
+      ...(filters.search ? { q: filters.search } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.scoring ? { scoring: filters.scoring } : {}),
+      ...(result.candidate ? { candidate: result.candidate.id } : {}),
+      ...(filters.sort !== "newest" ? { sort: filters.sort } : {}),
+      ...(filters.page > 1 ? { page: String(filters.page) } : {}),
+    }),
+  )}`;
 
-      <p className="mt-2 text-sm text-black/60 dark:text-white/60">
-        Exam attempts and their scoring status. This page is read-only.
-      </p>
+  return (
+    <PageBody>
+      <PageHeader
+        title="Attempts"
+        description="Exam attempts and their scoring status. This page is read-only."
+        actions={
+          <a
+            href={`/admin/attempts/export${exportQuery ? `?${exportQuery}` : ""}`}
+            className={buttonClass("secondary")}
+          >
+            <Download aria-hidden="true" className="size-4" />
+            Export CSV
+          </a>
+        }
+      />
 
       {result.unknownCandidate ? (
-        <p className="mt-4 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/15">
+        <Alert tone="warning" className="mb-4">
           That candidate no longer exists.{" "}
-          <Link href="/admin/attempts" className="underline">
+          <Link href="/admin/attempts" className="font-medium underline">
             Show all attempts
           </Link>
-        </p>
+        </Alert>
       ) : null}
 
+      {/* An active candidate filter is shown as a removable chip rather than a
+          sentence, so the narrowing is obvious and reversible at a glance. */}
       {result.candidate ? (
-        <p className="mt-4 rounded-md border border-black/10 px-3 py-2 text-sm dark:border-white/15">
-          Showing attempts for <span className="font-medium">{result.candidate.name}</span> (
-          {result.candidate.email}).{" "}
-          <Link href="/admin/attempts" className="underline">
-            Clear
-          </Link>
-        </p>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-muted">Filtered to</span>
+          <span className="inline-flex items-center gap-2 rounded-md border border-primary-border bg-primary-subtle py-1 pr-1 pl-2.5 text-[13px] text-primary">
+            <span className="font-medium">{result.candidate.name}</span>
+            <span className="text-primary/70">{result.candidate.email}</span>
+            <Link
+              href="/admin/attempts"
+              aria-label="Clear candidate filter"
+              className="inline-flex size-6 items-center justify-center rounded-sm hover:bg-primary-border max-md:size-8"
+            >
+              <X aria-hidden="true" className="size-3.5" />
+            </Link>
+          </span>
+        </div>
       ) : null}
 
-      <form method="get" className="mt-6 flex flex-wrap items-end gap-3">
-        {/* Preserved across a filter change, so narrowing by status does not
-            silently drop the candidate the admin navigated in with. */}
-        {result.candidate ? (
-          <input type="hidden" name="candidate" value={result.candidate.id} />
-        ) : null}
-
-        <label className="text-sm">
-          <span className="text-black/60 dark:text-white/60">Search</span>
-          <input
-            type="search"
-            name="q"
-            defaultValue={filters.search}
-            placeholder="Candidate name, email or mobile"
-            className={`${FIELD} w-72`}
-          />
-        </label>
-
-        <Select
+      <FilterBar
+        resetHref="/admin/attempts"
+        hidden={
+          // Preserved across a filter change, so narrowing by status does not
+          // silently drop the candidate the admin navigated in with.
+          result.candidate ? (
+            <input type="hidden" name="candidate" value={result.candidate.id} />
+          ) : null
+        }
+      >
+        <SearchField
+          id="attempts-search"
+          name="q"
+          label="Search"
+          defaultValue={filters.search}
+          placeholder="Candidate name, email or mobile"
+        />
+        <SelectField
+          id="attempts-status"
           name="status"
           label="Status"
           value={filters.status ?? ""}
           options={[
             ["", "All"],
-            ["in_progress", "In Progress"],
+            ["in_progress", "In progress"],
             ["submitted", "Submitted"],
-            ["auto_submitted", "Auto Submitted"],
+            ["auto_submitted", "Auto submitted"],
           ]}
         />
-
-        <Select
+        <SelectField
+          id="attempts-scoring"
           name="scoring"
           label="Scoring"
           value={filters.scoring ?? ""}
@@ -181,144 +157,122 @@ export default async function AttemptsPage({
             ["pending", "Scoring pending"],
           ]}
         />
-
-        <Select
+        <SelectField
+          id="attempts-sort"
           name="sort"
           label="Sort"
           value={filters.sort}
           options={Object.entries(SORT_LABELS) as [string, string][]}
         />
-
-        <Select
+        <SelectField
+          id="attempts-page-size"
           name="pageSize"
           label="Per page"
           value={String(filters.pageSize)}
           options={PAGE_SIZES.map((size) => [String(size), String(size)] as [string, string])}
         />
+      </FilterBar>
 
-        <button
-          type="submit"
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
-        >
-          Apply
-        </button>
-        <Link
-          href="/admin/attempts"
-          className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-        >
-          Reset
-        </Link>
-      </form>
-
-      <p className="mt-4">
-        {/* A plain link, not a form: the route is a GET that streams the CSV
-            back, so the browser downloads it without leaving the page. */}
-        <a
-          href={`/admin/attempts/export${exportQuery ? `?${exportQuery}` : ""}`}
-          className="rounded-md border border-black/15 px-4 py-2 text-sm dark:border-white/20"
-        >
-          Export CSV
-        </a>
-        <span className="ml-3 text-sm text-black/60 dark:text-white/60">
-          Exports every attempt matching the filters above.
-        </span>
-      </p>
-
-      <p className="mt-6 text-sm text-black/60 dark:text-white/60">
-        {result.total === 0
-          ? filtered
-            ? "No attempts match your filters."
-            : "No attempts found."
-          : `Showing ${first}–${last} of ${result.total} attempt${result.total === 1 ? "" : "s"}`}
-      </p>
-
-      {result.total > 0 ? (
-        <>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+      <div className="mt-6">
+        {result.total === 0 ? (
+          <EmptyState
+            icon={<ClipboardList aria-hidden="true" className="size-6" />}
+            // "Nothing matches" and "nothing exists yet" are different
+            // situations and are worded differently.
+            title={filtered ? "No attempts match your filters" : "No attempts yet"}
+            body={
+              filtered
+                ? "Try clearing the status or scoring filter, or widening your search."
+                : "Attempts appear here once candidates begin the exam."
+            }
+            action={
+              filtered ? (
+                <Link
+                  href="/admin/attempts"
+                  className={buttonClass("secondary")}
+                >
+                  Reset filters
+                </Link>
+              ) : null
+            }
+          />
+        ) : (
+          <>
+            <TableContainer label="Attempts table" minWidth={980}>
               <thead>
                 <tr>
-                  {["Candidate", "Email", "Mobile", "Status", "Started", "Submitted", "Score", ""].map(
-                    (header) => (
-                      <th key={header} className={`${CELL} font-medium`}>
-                        {header}
-                      </th>
-                    ),
-                  )}
+                  <Th>Candidate</Th>
+                  <Th>Mobile</Th>
+                  <Th>Status</Th>
+                  <Th>Started</Th>
+                  <Th>Submitted</Th>
+                  <Th align="right">Score</Th>
+                  {/* Named rather than left blank so the column is announced,
+                      without an absolutely-positioned sr-only span — that
+                      escapes the scroll container and drags the page width. */}
+                  <Th align="right">Result</Th>
                 </tr>
               </thead>
               <tbody>
                 {result.attempts.map((attempt) => (
-                  <tr key={attempt.id}>
-                    <td className={CELL}>
-                      {attempt.candidateName}
+                  <Tr key={attempt.id}>
+                    {/* Name and email form one identity cell: the name anchors
+                        the row, the email supports it. */}
+                    <Td>
+                      <span className="font-medium text-ink">{attempt.candidateName}</span>
+                      <span className="block text-xs text-muted">{attempt.candidateEmail}</span>
                       {attempt.enteredName && attempt.enteredName !== attempt.candidateName ? (
                         <span
-                          className="block text-xs text-black/50 dark:text-white/50"
+                          className="mt-0.5 block text-xs text-warning"
                           title="Name entered on the start screen"
                         >
                           entered: {attempt.enteredName}
                         </span>
                       ) : null}
-                    </td>
-                    <td className={CELL}>{attempt.candidateEmail}</td>
-                    <td className={CELL}>{attempt.candidateMobile}</td>
-                    <td className={CELL}>{attempt.statusLabel}</td>
-                    <td className={CELL}>{formatDate(attempt.startedAt)}</td>
-                    <td className={CELL}>{formatDate(attempt.submittedAt)}</td>
-                    <td className={CELL}>
+                    </Td>
+                    <Td className="text-ink-secondary tabular whitespace-nowrap">
+                      {attempt.candidateMobile}
+                    </Td>
+                    <Td>
+                      <AttemptStatusBadge status={attempt.status} label={attempt.statusLabel} />
+                    </Td>
+                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                      {formatDate(attempt.startedAt)}
+                    </Td>
+                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                      {formatDate(attempt.submittedAt)}
+                    </Td>
+                    <Td align="right">
                       <ScoreCell scoring={attempt.scoring} />
-                    </td>
-                    <td className={CELL}>
+                    </Td>
+                    <Td align="right">
+                      {/* No result to view while an attempt is still running —
+                          unchanged from the existing behaviour. */}
                       {attempt.status === "in_progress" ? (
-                        <span className="text-black/30 dark:text-white/30">—</span>
+                        <span className="text-disabled">—</span>
                       ) : (
                         <Link
-                          href={`/admin/attempts/${encodeURIComponent(attempt.id)}?back=${encodeURIComponent(
-                            `?${new URLSearchParams(
-                              Object.entries({
-                                ...(filters.search ? { q: filters.search } : {}),
-                                ...(filters.status ? { status: filters.status } : {}),
-                                ...(filters.scoring ? { scoring: filters.scoring } : {}),
-                                ...(result.candidate ? { candidate: result.candidate.id } : {}),
-                                ...(filters.sort !== "newest" ? { sort: filters.sort } : {}),
-                                ...(filters.page > 1 ? { page: String(filters.page) } : {}),
-                              }),
-                            )}`,
-                          )}`}
-                          className="underline"
+                          href={`/admin/attempts/${encodeURIComponent(attempt.id)}?back=${encodeURIComponent(backQuery)}`}
+                          className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
                         >
                           View result
                         </Link>
                       )}
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </TableContainer>
 
-          <nav className="mt-4 flex items-center gap-3 text-sm">
-            {result.page > 1 ? (
-              <Link href={pageLink(result.page - 1)} className="underline">
-                Previous
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Previous</span>
-            )}
-            <span>
-              Page {result.page} of {result.totalPages}
-            </span>
-            {result.page < result.totalPages ? (
-              <Link href={pageLink(result.page + 1)} className="underline">
-                Next
-              </Link>
-            ) : (
-              <span className="text-black/30 dark:text-white/30">Next</span>
-            )}
-          </nav>
-        </>
-      ) : null}
-    </main>
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              hrefFor={pageLink}
+              summary={`Showing ${first}–${last} of ${result.total} attempt${result.total === 1 ? "" : "s"}`}
+            />
+          </>
+        )}
+      </div>
+    </PageBody>
   );
 }

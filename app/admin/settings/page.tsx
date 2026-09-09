@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { PageBody, PageHeader } from "@/components/layout/page-header";
+import { Badge } from "@/components/ui/badge";
+import { TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { examBlueprintSummary, getExamSettings } from "@/lib/exam-settings";
 
@@ -8,7 +10,13 @@ import { SettingsForm } from "./settings-form";
 
 export const metadata: Metadata = { title: "Exam settings" };
 
-const CELL = "border-b border-black/5 px-3 py-2 text-left dark:border-white/10";
+/// Filters and the open/closed state gate candidate access, so this page is
+/// never served from a cached render.
+export const dynamic = "force-dynamic";
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 16).replace("T", " ");
+}
 
 export default async function ExamSettingsPage() {
   await requireAdmin();
@@ -17,13 +25,16 @@ export default async function ExamSettingsPage() {
   const { sections, totalQuestions, totalMarks } = examBlueprintSummary();
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Exam settings</h1>
-        <Link href="/admin" className="text-sm underline">
-          Admin home
-        </Link>
-      </div>
+    <PageBody>
+      <PageHeader
+        title="Exam settings"
+        description="Configuration for the CloudUS exam. Changes apply to papers drawn from now on."
+      />
+
+      {/* Read-only metadata: stated as text, never as a control. */}
+      <p className="mb-6 text-[13px] text-muted">
+        Last updated <span className="tabular">{formatDate(settings.updatedAt)}</span>
+      </p>
 
       <SettingsForm
         settings={{
@@ -36,53 +47,77 @@ export default async function ExamSettingsPage() {
         }}
       />
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Exam structure</h2>
-        <p className="mt-1 text-sm text-black/60 dark:text-white/60">
+      <section aria-labelledby="exam-structure" className="mt-10">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 id="exam-structure" className="text-base leading-6 font-semibold text-ink">
+            Exam structure
+          </h2>
+          {/* Says plainly that nothing below is editable, so the table is not
+              mistaken for a form the way a bare grid of numbers might be. */}
+          <Badge tone="neutral">Read-only</Badge>
+        </div>
+        <p className="mt-1 mb-4 text-[13px] text-muted">
           The shape of the paper is fixed by the exam specification and is not editable. Scoring and
           paper generation are built on these values.
         </p>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                {["#", "Section", "Questions", "Marks each", "Total", "Scored"].map((header) => (
-                  <th key={header} className={`${CELL} font-medium`}>
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sections.map((section) => (
-                <tr key={section.section}>
-                  <td className={CELL}>{section.section}</td>
-                  <td className={CELL}>{section.name}</td>
-                  <td className={CELL}>{section.questionCount}</td>
-                  <td className={CELL}>{section.marksPerQuestion}</td>
-                  <td className={CELL}>{section.questionCount * section.marksPerQuestion}</td>
-                  <td className={CELL}>{section.scored ? "Yes" : "No"}</td>
-                </tr>
-              ))}
-              <tr className="font-medium">
-                <td className={CELL} colSpan={2}>
-                  Total
-                </td>
-                <td className={CELL}>{totalQuestions}</td>
-                <td className={CELL} />
-                <td className={CELL}>{totalMarks}</td>
-                <td className={CELL} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <TableContainer label="Exam structure" minWidth={720}>
+          <thead>
+            <tr>
+              <Th align="right">#</Th>
+              <Th>Section</Th>
+              <Th align="right">Questions</Th>
+              <Th align="right">Marks each</Th>
+              <Th align="right">Total</Th>
+              <Th>Scored</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {sections.map((section) => (
+              <Tr key={section.section}>
+                <Td align="right" className="text-muted tabular">
+                  {section.section}
+                </Td>
+                <Td className="text-ink">{section.name}</Td>
+                <Td align="right" className="text-ink-secondary tabular">
+                  {section.questionCount}
+                </Td>
+                <Td align="right" className="text-ink-secondary tabular">
+                  {section.marksPerQuestion}
+                </Td>
+                <Td align="right" className="text-ink-secondary tabular">
+                  {section.questionCount * section.marksPerQuestion}
+                </Td>
+                <Td>
+                  {section.scored ? (
+                    <span className="text-[13px] text-ink-secondary">Yes</span>
+                  ) : (
+                    <Badge tone="neutral">Not scored</Badge>
+                  )}
+                </Td>
+              </Tr>
+            ))}
+            <tr className="border-t-2 border-line-strong">
+              <Td colSpan={2} className="font-semibold text-ink">
+                Total
+              </Td>
+              <Td align="right" className="font-semibold text-ink tabular">
+                {totalQuestions}
+              </Td>
+              <Td />
+              <Td align="right" className="font-semibold text-ink tabular">
+                {totalMarks}
+              </Td>
+              <Td />
+            </tr>
+          </tbody>
+        </TableContainer>
 
-        <p className="mt-3 text-sm text-black/60 dark:text-white/60">
+        <p className="mt-3 text-[13px] text-muted">
           Section 7 is drawn as 2 lesson groups of 3 questions that stay together. Section 8 is
           stored but never scored.
         </p>
       </section>
-    </main>
+    </PageBody>
   );
 }

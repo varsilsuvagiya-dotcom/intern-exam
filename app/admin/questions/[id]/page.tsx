@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  DifficultyChip,
+  QuestionActiveBadge,
+  QuestionStatusBadge,
+} from "@/components/admin/question-status-badge";
+import { PageBody, PageHeader } from "@/components/layout/page-header";
+import { Chip } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/db";
 import { VALID_SECTIONS } from "@/lib/question-bank/csv-contract";
@@ -9,6 +15,10 @@ import { VALID_SECTIONS } from "@/lib/question-bank/csv-contract";
 import { QuestionEditor } from "./question-editor";
 
 export const metadata: Metadata = { title: "Edit question" };
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
 
 export default async function QuestionDetailPage({
   params,
@@ -25,16 +35,23 @@ export default async function QuestionDetailPage({
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-12">
-      <Link href="/admin/questions" className="text-sm underline">
-        ← Back to question bank
-      </Link>
+    <PageBody width="form">
+      <PageHeader
+        breadcrumbs={[{ label: "Questions", href: "/admin/questions" }, { label: "Edit question" }]}
+        title="Edit question"
+        description={`Created ${formatDate(question.createdAt)} · Last updated ${formatDate(question.updatedAt)}`}
+      />
 
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">{question.id}</h1>
-      <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-        Created {question.createdAt.toISOString().slice(0, 10)} · Last updated{" "}
-        {question.updatedAt.toISOString().slice(0, 10)}
-      </p>
+      {/* Identity and current state, read-only. The editable copies of status,
+          difficulty and section live in the form; these are here so the page
+          identifies itself without the admin having to read the controls. */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs break-all text-muted">{question.id}</span>
+        <Chip>Section {question.section}</Chip>
+        <DifficultyChip difficulty={question.difficulty} />
+        <QuestionStatusBadge status={question.status} />
+        <QuestionActiveBadge isActive={question.isActive} />
+      </div>
 
       <QuestionEditor
         sections={VALID_SECTIONS}
@@ -61,6 +78,6 @@ export default async function QuestionDetailPage({
           isActive: question.isActive,
         }}
       />
-    </main>
+    </PageBody>
   );
 }

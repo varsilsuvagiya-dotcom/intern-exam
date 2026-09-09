@@ -26,7 +26,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// Typed explicitly rather than via the generated `LayoutProps<"/">`: that
+// helper resolves against every layout route, and adding the admin layout made
+// it ambiguous. The shape is the same.
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
