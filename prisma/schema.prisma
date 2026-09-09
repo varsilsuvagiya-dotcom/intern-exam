@@ -97,7 +97,20 @@ model Attempt {
   submittedAt     DateTime?     @map("submitted_at")
   /// Wall-clock seconds the candidate actually spent; filled in on submission.
   durationSeconds Int?          @map("duration_seconds")
+  /// Null until scoring has run. Scoring only ever runs on a finalized attempt,
+  /// and always recomputes the whole total from the stored paper and answers.
   totalScore      Decimal?      @map("total_score") @db.Decimal(5, 2)
+  section1Score   Decimal?      @map("section_1_score") @db.Decimal(5, 2)
+  section2Score   Decimal?      @map("section_2_score") @db.Decimal(5, 2)
+  section3Score   Decimal?      @map("section_3_score") @db.Decimal(5, 2)
+  section4Score   Decimal?      @map("section_4_score") @db.Decimal(5, 2)
+  section5Score   Decimal?      @map("section_5_score") @db.Decimal(5, 2)
+  section6Score   Decimal?      @map("section_6_score") @db.Decimal(5, 2)
+  section7Score   Decimal?      @map("section_7_score") @db.Decimal(5, 2)
+  /// Always 0: section 8 is stored but never scored. Kept as a column so the
+  /// admin result view can render all eight sections from one row.
+  section8Score   Decimal?      @map("section_8_score") @db.Decimal(5, 2)
+  scoredAt        DateTime?     @map("scored_at")
   status          AttemptStatus @default(in_progress)
   /// What the candidate typed on the start screen. Recorded here rather than
   /// written back to Candidate, because the Google Form record is the
@@ -120,6 +133,7 @@ model Attempt {
   @@index([status])
   @@index([startedAt])
   @@index([submittedAt])
+  @@index([scoredAt])
   @@map("attempts")
 }
 
@@ -149,6 +163,10 @@ model AttemptQuestion {
   lessonText   String?   @map("lesson_text")
   lessonGroup  String?   @map("lesson_group")
   marks        Decimal   @db.Decimal(4, 2)
+  /// Snapshot of Question.scored. False for section 8. Scoring reads this rather
+  /// than the live question, so flipping the flag in the bank cannot retroactively
+  /// change what an already-sat paper was worth.
+  scored       Boolean   @default(true)
 
   attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Restrict)

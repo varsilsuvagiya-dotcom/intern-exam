@@ -49,6 +49,7 @@ type SelectedQuestion = {
   lessonText: string | null;
   lessonGroup: string | null;
   marks: string;
+  scored: boolean;
 };
 
 type PoolQuestion = SelectedQuestion & { difficulty: string };
@@ -86,6 +87,7 @@ function toSelected(row: PoolQuestion): SelectedQuestion {
     lessonText: row.lessonText,
     lessonGroup: row.lessonGroup,
     marks: row.marks,
+    scored: row.scored,
   };
 }
 
@@ -326,6 +328,7 @@ export async function ensureExamPaper(
       lessonText: true,
       lessonGroup: true,
       marks: true,
+      scored: true,
     },
   });
 
@@ -346,6 +349,7 @@ export async function ensureExamPaper(
       lessonText: row.lessonText,
       lessonGroup: row.lessonGroup,
       marks: row.marks.toString(),
+      scored: row.scored,
     };
     const existing = bySection.get(row.section) ?? [];
     existing.push(entry);

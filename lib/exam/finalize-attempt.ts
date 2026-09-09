@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { sectionBlueprint } from "@/lib/exam-settings/exam-blueprint";
 
 import { computeTiming } from "./exam-timer";
+import { scoreAttempt } from "./scoring";
 
 export type TerminalStatus = "submitted" | "auto_submitted";
 
@@ -86,6 +87,32 @@ export async function getSubmissionSummary(attemptId: string): Promise<Submissio
   };
 }
 
+/// Scores an attempt that has just been finalized.
+///
+/// Finalization deliberately does not depend on this succeeding. The attempt is
+/// already in a terminal state by the time this runs, and a scoring failure must
+/// not undo that — reverting to in_progress would hand a submitted candidate
+/// their exam back. So a failure is logged and swallowed, leaving the attempt
+/// finalized with `scoredAt` still null, which is exactly the state a later
+/// re-run of scoreAttempt() picks up and completes.
+async function scoreFinalizedAttempt(attemptId: string): Promise<void> {
+  try {
+    const result = await scoreAttempt(attemptId);
+
+    if (result.kind !== "scored") {
+      console.error("Scoring did not complete for a finalized attempt.", {
+        attemptId,
+        kind: result.kind,
+      });
+    }
+  } catch (error) {
+    console.error("Scoring threw for a finalized attempt; it remains finalized and unscored.", {
+      attemptId,
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+}
+
 /// Ends an attempt.
 ///
 /// The status is decided by the server clock, not by the caller: a manual submit
@@ -137,6 +164,7 @@ export async function finalizeAttempt(
 
   if (result.count === 1) {
     console.info(`Attempt finalized as ${status}.`);
+    await scoreFinalizedAttempt(attemptId);
     return { kind: "finalized", status, alreadyFinal: false };
   }
 

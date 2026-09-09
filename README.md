@@ -240,6 +240,355 @@ Returning to `/exam/start` with the same mobile is refused, as before.
 Scoring, results, and CSV export are later phases. Nothing here computes
 `isCorrect`, `marksAwarded` or a total.
 
+## Scoring
+
+Scoring lives in `lib/exam/scoring.ts` and runs entirely on the server. Nothing
+about it is reachable from the candidate browser: no action returns a score, and
+`correct` never leaves the database for a candidate response.
+
+### When it runs
+
+`finalizeAttempt` calls it immediately after the attempt reaches a terminal
+state, so a manually submitted and an automatically submitted attempt are scored
+identically. Only `submitted` and `auto_submitted` attempts can be scored; an
+`in_progress` attempt is rejected, because it is still accepting answers.
+
+Scoring is deliberately *not* part of finalization's atomic write. The attempt is
+already terminal by the time scoring starts, and a scoring failure is logged and
+swallowed rather than rolled back — reverting would hand a submitted candidate
+their exam back. A failure leaves the attempt finalized with `scored_at` still
+null, which is exactly what a later `scoreAttempt()` call picks up and finishes.
+
+### Rules
+
+- **Snapshot-based.** Every value comes from the `AttemptQuestion` row: `correct`,
+  `marks`, `section` and `scored`. The live `Question` row is never read. Editing,
+  re-marking, re-sectioning or deactivating a question in the bank cannot change a
+  result that has already been produced.
+- **No negative marking.** A wrong answer scores 0, never less.
+- **Unanswered** questions score 0 with `is_correct = false`, and keep
+  `selected_option = null` so an admin view can still tell them apart from a
+  wrong answer.
+- **Invalid answers** — anything outside `a`–`d` — are treated as unanswered and
+  score 0. The enum blocks such values at the column too.
+- **Section 8 is never scored.** Its free text stays in `text_answer` untouched,
+  `is_correct` is `null` (not `false` — the candidate did not get it "wrong"),
+  `marks_awarded` is 0, and the section total is always 0.
+- **Section 7** is 6 questions across 2 lesson groups at 2.5 marks each, for a
+  maximum of 15.
+
+### Persistence
+
+`attempts` carries `total_score`, `section_1_score` … `section_8_score` and
+`scored_at`, all `Decimal(5,2)`. Per-question results go to `answers.is_correct`
+and `answers.marks_awarded`. Scoring writes only those columns — a candidate's
+`selected_option` and `text_answer` are never modified.
+
+Marks are summed as integer hundredths and converted to a fixed 2-decimal string
+at the edges, so a section of 1.5-mark questions totals exactly `12.00` rather
+than `11.999999999999998`.
+
+### Idempotency and concurrency
+
+Each run recomputes the entire score from the stored paper and answers; nothing
+is accumulated, so re-running is a no-op rather than a doubling. Rows are written
+with a single set-based `INSERT ... ON CONFLICT` covering the whole paper, which
+also keeps the transaction short enough that several callers scoring the same
+attempt at once cannot time it out. Four concurrent runs produce one consistent
+total and no duplicate answer rows.
+
+### Failure handling
+
+A paper that does not describe a valid exam — wrong question count, a section
+short of questions, a section scoring above its maximum, an unknown section, or a
+total outside 0–70 — is refused. Nothing is written and the problems are logged.
+The result is never clamped into range, because an impossible score is a data
+problem for an admin, not a number to round.
+
+A `CHECK` constraint on `attempts` independently rejects any stored total outside
+0–70.
+
+### Not in this phase
+
+There is no admin result UI and no candidate-facing result of any kind. Phase 12
+provides only the scoring backend and its stored data.
+
+## CSV export
+
+Two admin-only exports, both generated straight into the HTTP response. Nothing
+is written to disk, uploaded to storage, or served from a public URL, and no CSV
+content or candidate detail is ever logged.
+
+### Summary export — `/admin/attempts/export`
+
+Reached from the **Export CSV** button on `/admin/attempts`. One row per attempt,
+honouring the filters currently applied — `q`, `status`, `scoring`, `candidate`,
+`sort` — parsed by the same `parseAttemptFilters` the page itself uses, so an
+unrecognised value falls back to its default rather than reaching the database.
+Page size is deliberately ignored: the export covers the whole filtered set, not
+the page being viewed.
+
+28 columns:
+
+```
+attempt_id, candidate_name, candidate_email, candidate_mobile,
+entered_name, entered_email, status, started_at, submitted_at, scored_at,
+total_score, max_score,
+section_1_score, section_1_max, … section_8_score, section_8_max
+```
+
+Maxima are 10 / 6 / 10 / 12 / 9 / 8 / 15 / 0, total 70.00.
+
+### Detailed export — `/admin/attempts/[id]/export`
+
+Reached from **Export result CSV** on the individual result page, which appears
+only for a finalized, scored attempt. One row per question, 29 columns, covering
+the snapshot question and options, the displayed option order, candidate and
+correct answers, result, marks, explanation, and lesson group/text.
+
+The route refuses an in-progress attempt (409) as well as hiding the button:
+those rows carry the correct answers and explanations, and handing them over
+during a supervised sitting would leak the answer key. A scoring-pending attempt
+is refused for the simpler reason that there is no result yet.
+
+### Scores
+
+Always the persisted Phase 12 columns — never recomputed, and never calculated in
+the browser. Every score cell is formatted to exactly two decimals from the
+Decimal's own string, so `1.5` exports as `1.50` and no floating-point artefact
+can appear.
+
+A score column is **blank** unless the attempt is both finalized and scored:
+
+| Attempt state | Score columns |
+|---|---|
+| `in_progress` | blank (also `submitted_at`, `scored_at`) |
+| finalized, `scored_at` null | blank (`submitted_at` still populated) |
+| finalized and scored | persisted values |
+
+Blank rather than `0.00`, which would read as "scored zero". Exporting never
+triggers scoring.
+
+### Historical integrity
+
+The detailed export reads only the `AttemptQuestion` snapshot — question text,
+code block, options, `correct`, explanation, marks, section, lesson text, lesson
+group, `scored`, and the option permutation. **The live `Question` table is never
+queried.** A test rewrites every field of every source question, deactivates them,
+and asserts both exports come back byte-identical.
+
+### Escaping and encoding
+
+Rows are serialized by papaparse — the same library the question-bank import uses
+— so commas, double quotes, newlines, carriage returns, tabs and Unicode are
+escaped by a real CSV writer rather than by string concatenation. Every CSV is
+prefixed with a UTF-8 BOM so Excel renders Gujarati, accented Latin and CJK text
+correctly. Multiline code blocks and Section 8 free text round-trip exactly,
+verified by parsing the output with a CSV parser rather than by string matching.
+
+### Formula-injection protection
+
+Excel and Sheets execute a cell whose text begins with `=`, `+`, `-`, `@`, or a
+leading tab/carriage return. Any exported value starting with one of those is
+prefixed with a single quote, which spreadsheets consume as "treat as text".
+
+The stored data is untouched — only the exported representation changes — and
+ordinary text, including text with an interior `=`, is left exactly as it is. A
+genuinely negative number is quoted too: there is no way to distinguish `-5` from
+`-1+1` without parsing, and a visible quote is a far smaller cost than executing
+a formula from a candidate-supplied name or free-text answer.
+
+### Access and privacy
+
+Both routes call `requireAdmin()` before any query; an unauthenticated request
+gets a 307 to `/admin/login` with no CSV body, and a forged session cookie is
+rejected. Filenames carry a date and, for the detailed export, the attempt id —
+never a candidate name, email or mobile, since filenames end up in download
+histories. Responses are `Cache-Control: no-store`.
+
+### Known limitations
+
+- The export builds the whole CSV in memory and sends it in one response. Fine at
+  hiring-cohort scale; a very large dataset would want streaming.
+- There is no combined "all attempts, all questions" export — the detailed export
+  is per attempt.
+- A legitimately negative-looking value is quote-prefixed, as described above.
+
+## Admin individual result
+
+`/admin/attempts/[id]` — the full review of one attempt, behind `requireAdmin()`.
+Review-only: there is no edit, override, rescore, reopen or delete control.
+
+### Data source
+
+Everything historical comes from the `AttemptQuestion` snapshot taken when the
+paper was drawn: question text, code block, options, correct answer, explanation,
+marks, section, lesson text and lesson group, plus the stored option permutation.
+**The live `Question` table is never read.** Rewriting or deactivating a question
+in the bank afterwards leaves an existing result byte-identical, which is asserted
+by a test that rewrites every field and re-renders.
+
+Scores come from the columns Phase 12 persisted on `Attempt`. The page never calls
+the scoring engine and never recomputes a total.
+
+`topic` is not part of the snapshot, so it is not shown — reading it from the live
+question would break historical integrity for the sake of one label.
+
+### Page states
+
+| Attempt state | What is shown |
+|---|---|
+| `in_progress` | Candidate and attempt metadata, "In Progress". **No score, no correct answers, no explanations, no question review.** |
+| finalized, `scored_at` null | "Scoring Pending". No score, no review. Nothing is scored by opening the page. |
+| finalized and scored | Full result: total, section breakdown, all 55 questions. |
+
+The in-progress case returns before any snapshot row is loaded, so the answer key
+cannot reach the page while a supervised exam is still running.
+
+### Layout
+
+Back to attempts (preserving the filter you arrived with) · Candidate summary ·
+Attempt summary · Score · Section breakdown · Question review.
+
+An entered name or email that differs from the synchronized registration is
+highlighted; matching values are not repeated.
+
+### Question review
+
+Grouped by section, ordered by `displayOrder`. Each question shows its number,
+state, marks awarded over maximum, text, code block, options, candidate answer,
+correct answer with its option text, and explanation ("No explanation provided."
+when the snapshot has none).
+
+**Option order** is reconstructed from `shuffledOptionOrder`, so the admin sees the
+paper exactly as the candidate did. The letter shown is the original snapshot key,
+not the display position, and the correct option is identified from the snapshot
+`correct` regardless of where the shuffle placed it.
+
+**States** are distinguished rather than collapsed:
+
+- **Correct** — full snapshot marks
+- **Wrong** — 0 marks, candidate's choice shown
+- **Unanswered** — 0 marks, never labelled wrong
+- **Unscored** — section 8 only
+
+A question with no `Answer` row at all reads as Unanswered with 0 marks. Viewing
+does not create the missing row.
+
+### Section 7
+
+Grouped by `lessonGroup`, with the snapshot lesson text shown once above the three
+questions drawn with it. Groups never interleave and question order within a group
+is preserved. Maximum 15.00 across 2 groups × 3 questions × 2.5 marks.
+
+### Section 8
+
+Free-text answers are displayed exactly as stored — never trimmed, normalized or
+rewritten. No correct answer, no correctness and no right/wrong state is shown,
+because the section is unscored by design. Marks are always 0.00 / 0.00 and the
+section total is always 0.00.
+
+### Read-only and performance
+
+The page issues three reads — the attempt with its candidate, the exam settings,
+and the snapshot rows with their answers joined — regardless of paper size, so
+there is no per-question query. It contains no write call of any kind; a test
+asserts the attempt row, every answer, the paper and the question bank are all
+unchanged after repeated viewing.
+
+### Known limitations
+
+- `topic` cannot be reviewed historically, as above.
+- The page is desktop-first and not tuned for narrow screens.
+- There is no export; a long paper is one scrolling page.
+
+## Admin candidates and attempts
+
+Two read-only admin views, both behind `requireAdmin()`. An unauthenticated
+request is redirected to `/admin/login` and no data is rendered.
+
+### `/admin/candidates`
+
+Registrations synchronized from the Google Form, read from the `candidates`
+table — nothing here queries Google. Columns: name, email, mobile, registered,
+updated, and the number of attempts.
+
+- **Search** by name, email or mobile (`?q=`), case-insensitive, server-side.
+- **Pagination** (`?page=`, `?pageSize=` from 25 / 50 / 100), default 25.
+- Attempt counts come from a `_count` aggregate in the same query, so the page
+  costs two statements regardless of how many candidates it shows.
+- **View attempts** links to the attempts page filtered to that candidate.
+
+Mobile numbers are deliberately not unique. Two candidates sharing one are shown
+as two rows and are never merged.
+
+### `/admin/attempts`
+
+Columns: candidate name, email, mobile, status, started, submitted, score, and a
+result link. Where the name typed on the start screen differs from the registered
+name, both are shown so a mismatch is visible.
+
+- **Search** by candidate name, email or mobile (`?q=`).
+- **Status filter** (`?status=`): in_progress, submitted, auto_submitted. The
+  stored enum is never changed — only its label ("In Progress", "Submitted",
+  "Auto Submitted").
+- **Scoring filter** (`?scoring=`): `scored`, or `pending` for an attempt that is
+  finalized but has no `scored_at` yet. In-progress attempts are not "pending" and
+  are excluded from that filter.
+- **Sort** (`?sort=`): newest (default), oldest, submitted newest/oldest, score
+  high-to-low, score low-to-high. Sort keys are resolved through a fixed
+  allowlist with `Object.hasOwn`, so no query value ever reaches `orderBy` —
+  including prototype keys such as `__proto__`.
+- **Candidate filter** (`?candidate=`) is resolved against the database before
+  use; an id that matches nothing filters to zero rows rather than being trusted
+  or silently ignored.
+- **Pagination** as above. Ordering breaks ties on `id`, so paging is stable when
+  attempts share a timestamp or score.
+
+Every query parameter is parsed defensively: unknown status, scoring, sort and
+page-size values fall back to the default, and a page number that is negative,
+zero, fractional or non-numeric becomes page 1. Filters live in the URL, so an
+admin view is shareable and bookmarkable.
+
+### Score visibility
+
+Scores appear only in the authenticated admin interface, and only from the
+columns scoring persisted — nothing is recalculated for a listing.
+
+| Attempt state | Shown |
+|---|---|
+| `in_progress` | "Not finalized" |
+| finalized, `scored_at` null | "Scoring pending" |
+| finalized and scored | `52.50 / 70.00` |
+
+An in-progress attempt never shows a number that could be mistaken for a final
+result. Candidate-facing code is unchanged and still carries no score, no
+`correct` and no `explanation`; a regression test asserts this.
+
+### Read-only
+
+Phase 13 adds no way to change exam data. The pages issue only reads, the query
+modules contain no write call, and the only form on either page is the GET filter
+form. An admin cannot edit answers, submit for a candidate, change a status,
+alter the timer or adjust a score from these views.
+
+### `/admin/attempts/[id]`
+
+A deliberate placeholder so "View result" has a real target and the attempt id is
+validated. It shows candidate, status and start time only — no score, no section
+breakdown, no question review. Phase 14 builds the real result page.
+
+### Indexes
+
+No migration was needed. Sorting and filtering use existing indexes on
+`attempts.started_at`, `submitted_at`, `scored_at`, `status`,
+`(candidate_id, status)` and on `candidates.email` / `mobile`.
+
+Case-insensitive `contains` search does not use those btree indexes and scans.
+At a hiring cohort's scale that is fine; if the candidate table grows into the
+hundreds of thousands, a trigram index would be the fix. No index was added
+speculatively.
+
 ## Paper generation
 
 Each attempt gets its own randomly drawn paper of 55 questions worth 70 marks.
