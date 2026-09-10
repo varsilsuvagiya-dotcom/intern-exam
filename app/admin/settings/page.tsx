@@ -64,20 +64,17 @@ export default async function ExamSettingsPage() {
         <TableContainer label="Exam structure" minWidth={720}>
           <thead>
             <tr>
-              <Th align="right">#</Th>
+              <Th>Code</Th>
               <Th>Section</Th>
               <Th align="right">Questions</Th>
               <Th align="right">Marks each</Th>
               <Th align="right">Total</Th>
-              <Th>Scored</Th>
             </tr>
           </thead>
           <tbody>
             {sections.map((section) => (
-              <Tr key={section.section}>
-                <Td align="right" className="text-muted tabular">
-                  {section.section}
-                </Td>
+              <Tr key={section.code}>
+                <Td className="font-mono text-xs text-muted">{section.code}</Td>
                 <Td className="text-ink">{section.name}</Td>
                 <Td align="right" className="text-ink-secondary tabular">
                   {section.questionCount}
@@ -87,13 +84,6 @@ export default async function ExamSettingsPage() {
                 </Td>
                 <Td align="right" className="text-ink-secondary tabular">
                   {section.questionCount * section.marksPerQuestion}
-                </Td>
-                <Td>
-                  {section.scored ? (
-                    <span className="text-[13px] text-ink-secondary">Yes</span>
-                  ) : (
-                    <Badge tone="neutral">Not scored</Badge>
-                  )}
                 </Td>
               </Tr>
             ))}
@@ -108,14 +98,12 @@ export default async function ExamSettingsPage() {
               <Td align="right" className="font-semibold text-ink tabular">
                 {totalMarks}
               </Td>
-              <Td />
             </tr>
           </tbody>
         </TableContainer>
 
         <p className="mt-3 text-[13px] text-muted">
-          Section 7 is drawn as 2 lesson groups of 3 questions that stay together. Section 8 is
-          stored but never scored.
+          Learn-and-Apply (LRN) is drawn as 2 lesson groups of 3 questions that stay together.
         </p>
       </section>
     </PageBody>

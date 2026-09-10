@@ -115,7 +115,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed bottom-0 right-0 z-50 flex w-full flex-col items-center gap-2 p-4 md:w-auto md:items-end md:p-6"
+        className="pointer-events-none fixed top-0 right-0 z-50 flex w-full flex-col-reverse items-center gap-2 p-4 md:w-auto md:items-end md:p-6"
       >
         {toasts
           .filter((toast) => toast.tone === "success" || toast.tone === "info")
@@ -128,7 +128,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-live="assertive"
         role="alert"
         aria-atomic="false"
-        className="pointer-events-none fixed bottom-0 right-0 z-50 flex w-full flex-col items-center gap-2 p-4 md:w-auto md:items-end md:p-6"
+        className="pointer-events-none fixed top-0 right-0 z-50 flex w-full flex-col-reverse items-center gap-2 p-4 md:w-auto md:items-end md:p-6"
       >
         {toasts
           .filter((toast) => toast.tone === "warning" || toast.tone === "danger")

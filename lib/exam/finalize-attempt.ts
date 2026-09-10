@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { sectionBlueprint } from "@/lib/exam-settings/exam-blueprint";
+import { sectionBlueprintByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 
 import { computeTiming } from "./exam-timer";
 import { scoreAttempt } from "./scoring";
@@ -38,8 +38,8 @@ function isAnswered(
     return false;
   }
 
-  const blueprint = sectionBlueprint(section);
-  const freeText = blueprint ? !blueprint.scored : false;
+  const blueprint = sectionBlueprintByOrdinal(section);
+  const freeText = blueprint === undefined;
 
   return freeText ? (row.textAnswer ?? "").trim() !== "" : row.selectedOption !== null;
 }

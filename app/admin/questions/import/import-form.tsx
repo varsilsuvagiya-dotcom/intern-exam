@@ -9,7 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Td, Th, Tr } from "@/components/ui/table";
 import { useActionToast } from "@/components/ui/toast";
-import type { RowError } from "@/lib/question-bank/csv-import";
+import type { RowError, SkippedSheet } from "@/lib/question-bank/csv-import";
 
 import { confirmImport, previewImport, type ImportState } from "./actions";
 
@@ -105,28 +105,66 @@ function Counts({
   );
 }
 
-/// Errors grouped by the row they belong to, rather than as one flat list: an
-/// admin fixing a spreadsheet works row by row.
-function groupByRow(errors: RowError[]): { row: number; errors: RowError[] }[] {
-  const groups: { row: number; errors: RowError[] }[] = [];
+/// Errors grouped by where they were found, rather than as one flat list: an
+/// admin fixing a spreadsheet works a row at a time, and an import may span
+/// several files and sheets so the row number alone identifies nothing.
+type ErrorGroup = { key: string; label: string; errors: RowError[] };
+
+function describeLocation(error: RowError): string {
+  const parts: string[] = [];
+
+  if (error.file) parts.push(error.file);
+  if (error.sheet) parts.push(`sheet ${error.sheet}`);
+  // Row 0 is the file itself rather than a spreadsheet row.
+  parts.push(error.row > 0 ? `row ${error.row}` : "file");
+
+  return parts.join(" · ");
+}
+
+function groupErrors(errors: RowError[]): ErrorGroup[] {
+  const groups: ErrorGroup[] = [];
 
   for (const error of errors) {
-    const existing = groups.find((group) => group.row === error.row);
+    const key = describeLocation(error);
+    const existing = groups.find((group) => group.key === key);
 
     if (existing) {
       existing.errors.push(error);
       continue;
     }
 
-    groups.push({ row: error.row, errors: [error] });
+    groups.push({ key, label: key, errors: [error] });
   }
 
   return groups;
 }
 
+/// Sheets that were read but are not question sheets. A workbook often carries
+/// a working copy beside the real data; saying so is what stops a skipped sheet
+/// looking like data that quietly went missing.
+function SkippedList({ skipped }: { skipped: SkippedSheet[] }) {
+  if (skipped.length === 0) {
+    return null;
+  }
+
+  return (
+    <Alert tone="info" title={`${skipped.length} sheet${skipped.length === 1 ? "" : "s"} skipped`}>
+      <ul className="mt-1 space-y-1">
+        {skipped.map((entry) => (
+          <li key={`${entry.file}-${entry.sheet}`} className="text-[13px] wrap-anywhere">
+            <span className="font-medium">{entry.file}</span>
+            {entry.sheet ? <span className="text-muted"> · sheet {entry.sheet}</span> : null}
+            <span className="text-ink-secondary"> — {entry.reason}</span>
+          </li>
+        ))}
+      </ul>
+    </Alert>
+  );
+}
+
 function ErrorList({ errors }: { errors: RowError[] }) {
   const shown = errors.slice(0, ERROR_DISPLAY_LIMIT);
-  const groups = groupByRow(shown);
+  const groups = groupErrors(shown);
   const remaining = errors.length - shown.length;
 
   return (
@@ -137,17 +175,14 @@ function ErrorList({ errors }: { errors: RowError[] }) {
           {errors.length} problem{errors.length === 1 ? "" : "s"} found
         </h2>
         <p className="mt-1 text-[13px] text-ink-secondary">
-          Nothing was imported. Fix the CSV and upload it again.
+          Nothing was imported. Fix the files and upload them again.
         </p>
       </div>
 
       <ul className="divide-y divide-line">
         {groups.map((group) => (
-          <li key={group.row} className="px-4 py-2.5">
-            {/* Row 0 is the file itself rather than a spreadsheet row. */}
-            <p className="text-[13px] font-medium text-ink">
-              {group.row > 0 ? `Row ${group.row}` : "File"}
-            </p>
+          <li key={group.key} className="px-4 py-2.5">
+            <p className="text-[13px] font-medium wrap-anywhere text-ink">{group.label}</p>
             <ul className="mt-1 space-y-1">
               {group.errors.map((error, index) => (
                 <li key={index} className="text-[13px] text-ink-secondary">
@@ -181,7 +216,7 @@ export function ImportForm() {
     confirmImport,
     { stage: "idle" },
   );
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileNames, setFileNames] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Unchanged from the previous implementation: the confirm result takes over
@@ -201,8 +236,8 @@ export function ImportForm() {
       : null,
   );
 
-  const clearFile = () => {
-    setFileName(null);
+  const clearFiles = () => {
+    setFileNames([]);
     if (fileInput.current) {
       fileInput.current.value = "";
     }
@@ -215,28 +250,32 @@ export function ImportForm() {
       {/* The upload form stays mounted through every stage: re-uploading is how
           an admin recovers from an error or starts another import. */}
       <form action={previewAction} className="rounded-lg border border-line bg-surface p-4 lg:p-5">
-        <h2 className="text-[13px] font-semibold text-ink">Choose a CSV file</h2>
+        <h2 className="text-[13px] font-semibold text-ink">Choose question files</h2>
         <p className="mt-1 text-[13px] text-muted">
-          The file is parsed and checked first. Nothing is written to the question bank until you
-          confirm.
+          Select one or more files. Each row&rsquo;s section column decides where it belongs, so a
+          file may hold several sections. Everything is checked first, and nothing is written to
+          the question bank until you confirm.
         </p>
 
         {/* The real file input, styled rather than hidden: replacing it with a
             button that proxies clicks loses keyboard and assistive-tech
             behaviour that the native control already has. */}
         <div className="mt-4">
-          <label htmlFor="file" className="block text-[13px] font-medium text-ink">
-            CSV file
+          <label htmlFor="files" className="block text-[13px] font-medium text-ink">
+            Question files
           </label>
           <input
             ref={fileInput}
-            id="file"
-            name="file"
+            id="files"
+            name="files"
             type="file"
-            accept=".csv,text/csv"
+            multiple
+            accept=".csv,.xls,.xlsx"
             required
             aria-describedby="file-hint"
-            onChange={(event) => setFileName(event.target.files?.[0]?.name ?? null)}
+            onChange={(event) =>
+              setFileNames(Array.from(event.target.files ?? [], (file) => file.name))
+            }
             className={[
               "mt-1.5 block w-full rounded-md border border-line-strong bg-surface text-sm text-ink",
               "file:mr-3 file:cursor-pointer file:border-0 file:border-r file:border-line-strong",
@@ -245,27 +284,36 @@ export function ImportForm() {
             ].join(" ")}
           />
           <p id="file-hint" className="mt-1.5 text-xs text-muted">
-            A .csv file using the column format below.
+            .csv, .xls or .xlsx, using the column format below. Column order does not matter.
           </p>
         </div>
 
         {/* Announced politely: the filename appears without interrupting. */}
         <div aria-live="polite">
-          {fileName ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-line bg-subtle px-3 py-2">
-              <FileSpreadsheet aria-hidden="true" className="size-4 shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 text-[13px] wrap-anywhere text-ink">
-                <span className="text-muted">Selected: </span>
-                {fileName}
-              </span>
-              <button
-                type="button"
-                onClick={clearFile}
-                className="inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors duration-[120ms] hover:bg-inset hover:text-ink max-md:size-11"
-                aria-label={`Remove ${fileName}`}
-              >
-                <X aria-hidden="true" className="size-4" />
-              </button>
+          {fileNames.length > 0 ? (
+            <div className="mt-3 rounded-md border border-line bg-subtle px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <FileSpreadsheet aria-hidden="true" className="size-4 shrink-0 text-muted" />
+                <span className="min-w-0 flex-1 text-[13px] text-ink">
+                  <span className="text-muted">Selected: </span>
+                  {fileNames.length} file{fileNames.length === 1 ? "" : "s"}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFiles}
+                  className="inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors duration-[120ms] hover:bg-inset hover:text-ink max-md:size-11"
+                  aria-label="Remove selected files"
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </button>
+              </div>
+              <ul className="mt-1.5 space-y-0.5">
+                {fileNames.map((name) => (
+                  <li key={name} className="text-[13px] wrap-anywhere text-ink-secondary">
+                    {name}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
         </div>
@@ -284,7 +332,8 @@ export function ImportForm() {
       </form>
 
       {state.stage === "invalid" ? (
-        <div className="mt-4">
+        <div className="mt-4 space-y-4">
+          <SkippedList skipped={state.skipped} />
           <ErrorList errors={state.errors} />
         </div>
       ) : null}
@@ -300,8 +349,31 @@ export function ImportForm() {
             updated; new IDs are created. Nothing is ever deleted by an import.
           </Alert>
 
+          {state.skipped.length > 0 ? (
+            <div className="mt-4">
+              <SkippedList skipped={state.skipped} />
+            </div>
+          ) : null}
+
           <div className="mt-4">
             <Counts total={state.total} created={state.created} updated={state.updated} />
+          </div>
+
+          {/* What the upload actually contained, by section. The sections come
+              from the rows themselves, never from a file name. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
+            <span className="text-muted">
+              {state.fileCount} file{state.fileCount === 1 ? "" : "s"} ·
+            </span>
+            {state.sections.map((entry) => (
+              <span
+                key={entry.sectionCode}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-subtle px-2 py-0.5"
+              >
+                <span className="font-mono text-xs text-ink">{entry.sectionCode}</span>
+                <span className="tabular text-muted">{entry.count}</span>
+              </span>
+            ))}
           </div>
 
           <div className="mt-4">
@@ -314,9 +386,8 @@ export function ImportForm() {
               >
                 <thead className="sticky top-0 z-10">
                   <tr>
-                    <Th align="right">Row</Th>
                     <Th>ID</Th>
-                    <Th align="right">Section</Th>
+                    <Th>Section</Th>
                     <Th>Topic</Th>
                     <Th>Question</Th>
                     <Th>Difficulty</Th>
@@ -328,15 +399,10 @@ export function ImportForm() {
                 <tbody>
                   {state.rows.map((row) => (
                     <Tr key={row.id}>
-                      <Td align="right" className="text-muted tabular">
-                        {row.row}
-                      </Td>
                       <Td className="font-mono text-xs whitespace-nowrap text-ink-secondary">
                         {row.id}
                       </Td>
-                      <Td align="right" className="tabular">
-                        {row.section}
-                      </Td>
+                      <Td className="font-mono text-xs text-ink-secondary">{row.sectionCode}</Td>
                       <Td className="text-ink-secondary">{row.topic}</Td>
                       <Td>
                         <span className="line-clamp-2 max-w-[360px] text-ink">{row.question}</span>
@@ -362,13 +428,14 @@ export function ImportForm() {
           </div>
 
           <form action={confirmAction} className="mt-4 flex flex-wrap items-center gap-3">
-            {/* The CSV round-trips so the server re-parses and re-validates it;
-                the browser's preview counts are never trusted. */}
-            <input type="hidden" name="csv" value={state.csv} />
+            {/* The batch round-trips through the browser, so the server rebuilds
+                and re-validates every row before writing; nothing returned here
+                is trusted. */}
+            <input type="hidden" name="payload" value={state.payload} />
             <Button type="submit" variant="primary" loading={importing} loadingLabel="Importing…">
               Import {state.total} question{state.total === 1 ? "" : "s"}
             </Button>
-            <Button type="button" variant="tertiary" onClick={clearFile} disabled={importing}>
+            <Button type="button" variant="tertiary" onClick={clearFiles} disabled={importing}>
               Choose a different file
             </Button>
           </form>
@@ -394,7 +461,7 @@ export function ImportForm() {
             <Link href="/admin/questions" className={buttonClass("primary")}>
               View question bank
             </Link>
-            <Button type="button" variant="secondary" onClick={clearFile}>
+            <Button type="button" variant="secondary" onClick={clearFiles}>
               Import another file
             </Button>
           </div>

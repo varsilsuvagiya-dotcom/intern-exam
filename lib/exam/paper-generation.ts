@@ -5,10 +5,12 @@ import { randomInt } from "node:crypto";
 import { prisma } from "@/lib/db";
 import {
   LESSON_GROUPS_PER_PAPER,
+  LESSON_SECTION,
   QUESTIONS_PER_LESSON_GROUP,
   SECTION_BLUEPRINT,
   TOTAL_MARKS,
   TOTAL_QUESTIONS,
+  type SectionCode,
 } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
@@ -19,7 +21,6 @@ import {
   type DifficultyMix,
 } from "./difficulty-allocation";
 
-const LESSON_SECTION = 7;
 const OPTION_KEYS: OptionKey[] = ["a", "b", "c", "d"];
 
 /// Internal reasons, for server logs and admin diagnosis. Candidates never see
@@ -27,8 +28,8 @@ const OPTION_KEYS: OptionKey[] = ["a", "b", "c", "d"];
 export type GenerationFailure =
   | { code: "ATTEMPT_NOT_FOUND" }
   | { code: "ATTEMPT_NOT_IN_PROGRESS" }
-  | { code: "SECTION_INSUFFICIENT_QUESTIONS"; section: number; required: number; available: number }
-  | { code: "SECTION_7_INSUFFICIENT_LESSON_GROUPS"; available: number }
+  | { code: "SECTION_INSUFFICIENT_QUESTIONS"; section: string; required: number; available: number }
+  | { code: "LESSON_SECTION_INSUFFICIENT_GROUPS"; available: number }
   | { code: "PAPER_INVARIANT_FAILED"; problems: string[] };
 
 export type GenerationResult =
@@ -37,7 +38,11 @@ export type GenerationResult =
 
 type SelectedQuestion = {
   questionId: string;
+  /// The historical ordinal, written to the AttemptQuestion snapshot. The code
+  /// itself is not stored on a drawn paper: the snapshot keeps the numbering the
+  /// exam was recorded under.
   section: number;
+  sectionCode: SectionCode;
   questionText: string;
   codeBlock: string | null;
   optionA: string;
@@ -76,6 +81,7 @@ function toSelected(row: PoolQuestion): SelectedQuestion {
   return {
     questionId: row.questionId,
     section: row.section,
+    sectionCode: row.sectionCode,
     questionText: row.questionText,
     codeBlock: row.codeBlock,
     optionA: row.optionA,
@@ -224,24 +230,25 @@ export function validateGeneratedPaper(
   let cursor = 0;
   for (const section of SECTION_BLUEPRINT) {
     const block = rows
-      .filter((row) => row.section === section.section)
+      .filter((row) => row.section === section.ordinal)
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
     if (block.length !== section.questionCount) {
       problems.push(
-        `section ${section.section} has ${block.length} questions, expected ${section.questionCount}`,
+        `section ${section.code} has ${block.length} questions, expected ${section.questionCount}`,
       );
       continue;
     }
 
     const expectedStart = cursor + 1;
     if (block[0].displayOrder !== expectedStart) {
-      problems.push(`section ${section.section} starts at ${block[0].displayOrder}, expected ${expectedStart}`);
+      problems.push(`section ${section.code} starts at ${block[0].displayOrder}, expected ${expectedStart}`);
     }
     cursor += section.questionCount;
   }
 
-  const lessonRows = rows.filter((row) => row.section === LESSON_SECTION);
+  const lessonOrdinal = SECTION_BLUEPRINT.find((entry) => entry.code === LESSON_SECTION)?.ordinal;
+  const lessonRows = rows.filter((row) => row.section === lessonOrdinal);
   const lessonGroups = new Set(lessonRows.map((row) => row.lessonGroup));
   if (lessonGroups.size !== LESSON_GROUPS_PER_PAPER) {
     problems.push(`section ${LESSON_SECTION} has ${lessonGroups.size} lesson groups, expected ${LESSON_GROUPS_PER_PAPER}`);
@@ -332,11 +339,22 @@ export async function ensureExamPaper(
     },
   });
 
-  const bySection = new Map<number, PoolQuestion[]>();
+  const blueprintFor = new Map(SECTION_BLUEPRINT.map((entry) => [entry.code as string, entry]));
+
+  const bySection = new Map<string, PoolQuestion[]>();
   for (const row of pool) {
+    // A question whose section is not an active code — the deactivated Attitude
+    // rows, for instance — has no ordinal and is skipped. The query already
+    // filters them out by is_active; this is the second line of defence.
+    const active = blueprintFor.get(row.section);
+    if (!active) {
+      continue;
+    }
+
     const entry: PoolQuestion = {
       questionId: row.id,
-      section: row.section,
+      section: active.ordinal,
+      sectionCode: active.code,
       difficulty: row.difficulty,
       questionText: row.question,
       codeBlock: row.codeBlock,
@@ -359,15 +377,15 @@ export async function ensureExamPaper(
   const selected: SelectedQuestion[] = [];
 
   for (const section of SECTION_BLUEPRINT) {
-    const sectionPool = bySection.get(section.section) ?? [];
+    const sectionPool = bySection.get(section.code) ?? [];
 
-    if (section.section === LESSON_SECTION) {
+    if (section.code === LESSON_SECTION) {
       const groups = pickLessonGroups(sectionPool, mix, rand);
 
       if ("insufficient" in groups) {
         return {
           ok: false,
-          failure: { code: "SECTION_7_INSUFFICIENT_LESSON_GROUPS", available: groups.insufficient },
+          failure: { code: "LESSON_SECTION_INSUFFICIENT_GROUPS", available: groups.insufficient },
         };
       }
 
@@ -382,7 +400,7 @@ export async function ensureExamPaper(
         ok: false,
         failure: {
           code: "SECTION_INSUFFICIENT_QUESTIONS",
-          section: section.section,
+          section: section.code,
           required: section.questionCount,
           available: sectionPool.length,
         },
@@ -392,8 +410,23 @@ export async function ensureExamPaper(
     selected.push(...picked);
   }
 
+  // `sectionCode` is deliberately not carried onto the snapshot: a drawn paper
+  // records the ordinal, which is the numbering it is read back under.
   const rows = selected.map((question, index) => ({
-    ...question,
+    questionId: question.questionId,
+    section: question.section,
+    questionText: question.questionText,
+    codeBlock: question.codeBlock,
+    optionA: question.optionA,
+    optionB: question.optionB,
+    optionC: question.optionC,
+    optionD: question.optionD,
+    correct: question.correct,
+    explanation: question.explanation,
+    lessonText: question.lessonText,
+    lessonGroup: question.lessonGroup,
+    marks: question.marks,
+    scored: question.scored,
     displayOrder: index + 1,
     shuffledOptionOrder: shuffledOptions(rand),
   }));

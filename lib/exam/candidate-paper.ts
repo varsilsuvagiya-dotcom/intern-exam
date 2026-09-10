@@ -1,14 +1,16 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { sectionBlueprint } from "@/lib/exam-settings/exam-blueprint";
+import { sectionBlueprintByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 /// What the candidate's browser is allowed to see.
 ///
-/// `correct` and `explanation` are deliberately absent: they exist on the
-/// snapshot row but must never reach the client, so the mapping below names
-/// every field explicitly rather than spreading the database row.
+/// `correct`, `explanation` and `verifyCode` are deliberately absent: they
+/// exist on the question or its snapshot but must never reach the client, so
+/// the mapping below names every field explicitly rather than spreading the
+/// database row. Anything added to the snapshot in future is therefore withheld
+/// by default rather than exposed by accident.
 export type CandidateOption = { key: OptionKey; label: string; text: string };
 
 export type CandidateQuestion = {
@@ -21,9 +23,17 @@ export type CandidateQuestion = {
   /// Already in the order this candidate should see them.
   options: CandidateOption[];
   lessonText: string | null;
-  lessonGroup: string | null;
+  /// Which lesson this question belongs to, as a 1-based index within this
+  /// paper, and null outside Learn-and-Apply.
+  ///
+  /// Deliberately NOT the real `lessonGroup` identifier. That value is internal
+  /// authoring data and must not reach a candidate, so it is replaced here by
+  /// an opaque position that carries exactly what the lesson panel needs to say
+  /// "Lesson 1 of 2" and nothing more.
+  lessonIndex: number | null;
   marks: string;
-  /// Section 8 is answered in prose rather than by choosing an option.
+  /// True only for a question from a section the active blueprint no longer
+  /// knows, which is answered in prose. No active paper contains one.
   freeText: boolean;
 };
 
@@ -117,6 +127,17 @@ export async function getCandidatePaper(attemptId: string): Promise<PaperAccess>
     return { kind: "not-found" };
   }
 
+  // The real lesson group identifiers, reduced to 1-based positions in the
+  // order the candidate meets them. `lessonGroup` is read from the snapshot to
+  // build this map and is then discarded: it never becomes part of the payload
+  // below, so the value itself does not leave the server.
+  const lessonIndexes = new Map<string, number>();
+  for (const row of rows) {
+    if (row.lessonGroup && !lessonIndexes.has(row.lessonGroup)) {
+      lessonIndexes.set(row.lessonGroup, lessonIndexes.size + 1);
+    }
+  }
+
   return {
     kind: "ok",
     paper: {
@@ -126,7 +147,7 @@ export async function getCandidatePaper(attemptId: string): Promise<PaperAccess>
       examName: settings.examName,
       durationMinutes: settings.durationMinutes,
       questions: rows.map((row) => {
-        const blueprint = sectionBlueprint(row.section);
+        const blueprint = sectionBlueprintByOrdinal(row.section);
 
         return {
           id: row.id,
@@ -137,9 +158,12 @@ export async function getCandidatePaper(attemptId: string): Promise<PaperAccess>
           codeBlock: row.codeBlock,
           options: displayedOptions(row),
           lessonText: row.lessonText,
-          lessonGroup: row.lessonGroup,
+          lessonIndex: row.lessonGroup ? (lessonIndexes.get(row.lessonGroup) ?? null) : null,
           marks: row.marks.toString(),
-          freeText: blueprint ? !blueprint.scored : false,
+          // Every active section is answered by choosing an option. The removed
+          // Attitude section was the only free-text one, and no active paper can
+          // contain it; a historical paper that does still renders its snapshot.
+          freeText: blueprint === undefined,
         };
       }),
     },

@@ -1,6 +1,7 @@
 import { CheckCircle2, CircleSlash, MinusCircle, XCircle } from "lucide-react";
 
 import { Badge, Chip, type StatusTone } from "@/components/ui/badge";
+import { CodeBlock } from "@/app/exam/code-block";
 import type { ReviewQuestion, ReviewState } from "@/lib/admin/attempt-result";
 
 /// One question, as the candidate sat it.
@@ -16,7 +17,7 @@ const STATE: Record<ReviewState, { label: string; tone: StatusTone; icon: typeof
   unscored: { label: "Not scored", tone: "neutral", icon: CircleSlash },
 };
 
-/// `Q01`, so numbers align in a vertical scan of 55 cards.
+/// `Q01`, so numbers align in a vertical scan of many cards.
 function questionNumber(displayOrder: number): string {
   return `Q${String(displayOrder).padStart(2, "0")}`;
 }
@@ -121,12 +122,7 @@ export function QuestionReviewCard({ question }: { question: ReviewQuestion }) {
         {question.questionText}
       </p>
 
-      {/* Wide code scrolls inside its own box. The page never scrolls for it. */}
-      {question.codeBlock ? (
-        <pre className="mt-3 max-w-full overflow-x-auto rounded-md border border-line bg-inset p-3 text-xs leading-5">
-          <code className="font-mono text-ink">{question.codeBlock}</code>
-        </pre>
-      ) : null}
+      {question.codeBlock ? <CodeBlock code={question.codeBlock} /> : null}
 
       {question.scored ? (
         <>
@@ -135,7 +131,7 @@ export function QuestionReviewCard({ question }: { question: ReviewQuestion }) {
           <dl className="mt-3 divide-y divide-line border-t border-line">
             {/* When the candidate was right the option row above already says
                 so, in words, on the one row that matters. Repeating it as two
-                identical definition rows is noise on a 55-question page, so
+                identical definition rows is noise on a long page, so
                 only the disagreement is spelled out. */}
             {question.state === "correct" ? null : (
               <>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileSearch } from "lucide-react";
 
-import { PageBody } from "@/components/layout/page-header";
+import { FullPageEmptyState } from "@/components/layout/page-header";
 import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/table";
 
@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/table";
 /// public home page rather than back into the panel.
 export default function AdminNotFound() {
   return (
-    <PageBody width="form">
+    <FullPageEmptyState>
       <EmptyState
         icon={<FileSearch aria-hidden="true" className="size-6" />}
         title="Page not found"
@@ -22,6 +22,6 @@ export default function AdminNotFound() {
           </Link>
         }
       />
-    </PageBody>
+    </FullPageEmptyState>
   );
 }

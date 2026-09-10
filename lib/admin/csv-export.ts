@@ -3,7 +3,11 @@ import "server-only";
 import Papa from "papaparse";
 
 import { prisma } from "@/lib/db";
-import { SECTION_BLUEPRINT, TOTAL_MARKS, sectionBlueprint } from "@/lib/exam-settings/exam-blueprint";
+import {
+  SECTION_BLUEPRINT,
+  TOTAL_MARKS,
+  sectionNameByOrdinal,
+} from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 import { buildWhere, sortOrder, type AttemptFilters } from "./query-attempts";
@@ -65,6 +69,19 @@ export function toCsv(headers: string[], rows: Record<string, string>[]): string
 
 // ---------------------------------------------------------------- summary ---
 
+/// Score columns for sections the exam no longer runs.
+///
+/// These are not part of the blueprint and nothing writes them any more: they
+/// exist so an attempt sat before the section was retired still exports the
+/// score it was actually given. Dropping the columns would make a historical
+/// result quietly incomplete, and would shift every column after it for anyone
+/// reading the file by position.
+///
+/// An attempt sat under the current exam has no value here, so the cell is
+/// blank rather than "0.00", which would read as "scored zero".
+const RETIRED_SECTION_COLUMNS = [{ ordinal: 8, maxMarks: 0 }] as const;
+
+
 export const SUMMARY_HEADERS = [
   "attempt_id",
   "candidate_name",
@@ -78,7 +95,10 @@ export const SUMMARY_HEADERS = [
   "scored_at",
   "total_score",
   "max_score",
-  ...SECTION_BLUEPRINT.flatMap((s) => [`section_${s.section}_score`, `section_${s.section}_max`]),
+  // Column names keep the historical section numbers so an export produced
+  // before and after the section-code change lines up in the same spreadsheet.
+  ...SECTION_BLUEPRINT.flatMap((s) => [`section_${s.ordinal}_score`, `section_${s.ordinal}_max`]),
+  ...RETIRED_SECTION_COLUMNS.flatMap((s) => [`section_${s.ordinal}_score`, `section_${s.ordinal}_max`]),
 ] as const;
 
 /// One row per attempt, honouring the filters the admin had applied.
@@ -155,12 +175,22 @@ export async function buildSummaryCsv(filters: AttemptFilters): Promise<string> 
     };
 
     for (const blueprint of SECTION_BLUEPRINT) {
-      record[`section_${blueprint.section}_score`] = isScored
-        ? score(sectionValues[blueprint.section])
+      record[`section_${blueprint.ordinal}_score`] = isScored
+        ? score(sectionValues[blueprint.ordinal])
         : "";
-      record[`section_${blueprint.section}_max`] = (
+      record[`section_${blueprint.ordinal}_max`] = (
         blueprint.questionCount * blueprint.marksPerQuestion
       ).toFixed(2);
+    }
+
+    // Retired sections export whatever was stored for them, and nothing at all
+    // for an attempt that never had one.
+    for (const retired of RETIRED_SECTION_COLUMNS) {
+      const stored = sectionValues[retired.ordinal] ?? null;
+      record[`section_${retired.ordinal}_score`] = stored === null ? "" : score(stored);
+      record[`section_${retired.ordinal}_max`] = stored === null
+        ? ""
+        : retired.maxMarks.toFixed(2);
     }
 
     return record;
@@ -296,7 +326,7 @@ export async function buildDetailCsv(attemptId: string): Promise<DetailExport> {
       scored_at: timestamp(attempt.scoredAt),
       question_number: String(row.displayOrder),
       section: String(row.section),
-      section_name: sectionBlueprint(row.section)?.name ?? "",
+      section_name: sectionNameByOrdinal(row.section),
       question_text: row.questionText,
       code_block: row.codeBlock ?? "",
       option_a: row.optionA,

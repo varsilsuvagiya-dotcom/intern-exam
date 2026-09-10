@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { sectionBlueprint } from "@/lib/exam-settings/exam-blueprint";
+import { sectionBlueprintByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 import { getAttemptTiming } from "./exam-timer";
@@ -64,8 +64,8 @@ export async function saveAnswer(
     return { kind: "unauthorized" };
   }
 
-  const blueprint = sectionBlueprint(question.section);
-  const isFreeText = blueprint ? !blueprint.scored : false;
+  const blueprint = sectionBlueprintByOrdinal(question.section);
+  const isFreeText = blueprint === undefined;
 
   let selectedOption: OptionKey | null = null;
   let textAnswer: string | null = null;

@@ -16,6 +16,8 @@ export async function countExisting(ids: string[]): Promise<number> {
 
 /// Writes the whole validated batch inside one transaction, so a failure part
 /// way through leaves the question bank untouched rather than half-imported.
+/// The batch may span any number of files and any combination of sections; by
+/// the time it reaches here it is simply a list of validated rows.
 ///
 /// Updates deliberately do not touch AttemptQuestion: those rows carry their own
 /// snapshot of the question as it was drawn, which is what keeps a submitted
@@ -35,9 +37,20 @@ export async function importQuestions(rows: QuestionRow[]): Promise<ImportSummar
 
             // Upsert on the primary key: concurrent imports of the same id
             // cannot produce a duplicate, and the id itself is never rewritten.
+            //
+            // A new question is created inactive. Activation is a deliberate
+            // administrative act, so importing a file must never be enough to
+            // put a question in front of a candidate — not even later, when
+            // someone moves it from draft to ready. Those are two separate
+            // decisions and this keeps them that way.
+            //
+            // `isActive` is deliberately absent from the update branch, and
+            // `scored` from both. They are application state rather than source
+            // data: re-importing a file must not reactivate a question an admin
+            // deactivated, nor deactivate one they activated.
             return tx.question.upsert({
               where: { id },
-              create: { id, ...fields },
+              create: { id, ...fields, isActive: false },
               update: fields,
             });
           }),

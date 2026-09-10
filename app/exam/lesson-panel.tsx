@@ -4,13 +4,14 @@ import { BookOpen } from "lucide-react";
 
 import type { CandidateQuestion } from "@/lib/exam/candidate-paper";
 
-/// Where a Section 7 question sits inside its lesson group.
+/// Where a Section 7 question sits inside its lesson.
 ///
-/// Derived from the paper the server already sent — every `AttemptQuestion`
-/// row carries its own `lessonText` and `lessonGroup` snapshot, so this reads
-/// authoritative data rather than inferring anything. Nothing is persisted and
-/// no grouping rule is re-implemented here: paper generation already
-/// guarantees two complete groups of three, contiguous in display order.
+/// Derived from the paper the server already sent. The server supplies an
+/// opaque `lessonIndex` rather than the real lesson group identifier, which is
+/// internal authoring data and never leaves the server — everything this panel
+/// displays is a position, not an identity. Nothing is persisted and no
+/// grouping rule is re-implemented here: paper generation already guarantees
+/// two complete groups of three, contiguous in display order.
 export type LessonPosition = {
   /// 1-based index of this group within the paper's lesson groups.
   groupNumber: number;
@@ -24,20 +25,18 @@ export function lessonPosition(
   questions: CandidateQuestion[],
   current: CandidateQuestion,
 ): LessonPosition | null {
-  if (!current.lessonGroup) {
+  if (current.lessonIndex === null) {
     return null;
   }
 
-  // Group order follows display order, which is the order the candidate meets
-  // them in — not the order the identifiers happen to sort in.
-  const groups: string[] = [];
+  const groups = new Set<number>();
   for (const question of questions) {
-    if (question.lessonGroup && !groups.includes(question.lessonGroup)) {
-      groups.push(question.lessonGroup);
+    if (question.lessonIndex !== null) {
+      groups.add(question.lessonIndex);
     }
   }
 
-  const siblings = questions.filter((q) => q.lessonGroup === current.lessonGroup);
+  const siblings = questions.filter((q) => q.lessonIndex === current.lessonIndex);
   const indexInGroup = siblings.findIndex((q) => q.id === current.id);
 
   if (indexInGroup === -1) {
@@ -45,8 +44,9 @@ export function lessonPosition(
   }
 
   return {
-    groupNumber: groups.indexOf(current.lessonGroup) + 1,
-    groupCount: groups.length,
+    // The server already numbered the lessons in the order they appear.
+    groupNumber: current.lessonIndex,
+    groupCount: groups.size,
     questionInGroup: indexInGroup + 1,
     questionsInGroup: siblings.length,
   };

@@ -14,18 +14,30 @@ import { Check, ChevronDown } from "lucide-react";
 /// A real hidden `<select>` is kept in the form and updated on every change, so
 /// the surrounding GET form, its query parameters and all server-side filtering
 /// behave exactly as they did before. Nothing about the submitted data changes.
+///
+/// `onChange` is optional. A filter form only needs the hidden `<select>` to
+/// carry the right value at submit time, so it is left unset there; a form
+/// that reacts to the choice as it is made — a live badge, a "changed since
+/// save" flag — passes it and is told every time the selection changes, the
+/// same as it would be with a native `<select>`.
 export function ThemeSelect({
   id,
   name,
   value,
+  onChange,
   options,
   className = "",
+  invalid = false,
+  "aria-describedby": describedBy,
 }: {
   id: string;
   name: string;
   value: string;
+  onChange?: (value: string) => void;
   options: [string, string][];
   className?: string;
+  invalid?: boolean;
+  "aria-describedby"?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -62,6 +74,7 @@ export function ThemeSelect({
     setChosen(option[0]);
     setActive(index);
     setOpen(false);
+    onChange?.(option[0]);
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -126,9 +139,14 @@ export function ThemeSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         onClick={() => setOpen((shown) => !shown)}
         onKeyDown={onKeyDown}
-        className="flex h-9 w-full min-w-[9rem] items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-3 text-left text-sm text-ink transition-colors duration-[120ms] hover:bg-subtle max-md:h-11"
+        className={[
+          "flex h-9 w-full min-w-[9rem] items-center justify-between gap-2 rounded-md border bg-surface px-3 text-left text-sm text-ink transition-colors duration-[120ms] hover:bg-subtle max-md:h-11",
+          invalid ? "border-danger" : "border-line-strong",
+        ].join(" ")}
       >
         <span className="truncate">{label}</span>
         <ChevronDown

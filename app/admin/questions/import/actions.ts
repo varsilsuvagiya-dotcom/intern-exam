@@ -1,13 +1,19 @@
 "use server";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { parseQuestionCsv, validateFile, type RowError } from "@/lib/question-bank/csv-import";
+import {
+  parseQuestionFiles,
+  type RowError,
+  type SkippedSheet,
+} from "@/lib/question-bank/csv-import";
 import { countExisting, importQuestions } from "@/lib/question-bank/import-questions";
+import { verifyRows } from "@/lib/question-bank/verify-rows";
 
 export type PreviewRow = {
-  row: number;
   id: string;
-  section: number;
+  /// Shown as the code the file used. Derived from the resolved section for
+  /// display only — the database stores the section number, not this string.
+  sectionCode: string;
   topic: string;
   question: string;
   difficulty: string;
@@ -16,13 +22,25 @@ export type PreviewRow = {
   status: string;
 };
 
+/// What one upload contained, per section, so an admin can see at a glance that
+/// a file held the sections they expected. Derived from the parsed rows for
+/// display; nothing here is persisted.
+export type SectionCount = { sectionCode: string; count: number };
+
 export type ImportState =
   | { stage: "idle" }
-  | { stage: "invalid"; errors: RowError[] }
+  | { stage: "invalid"; errors: RowError[]; skipped: SkippedSheet[] }
   | {
       stage: "preview";
-      csv: string;
+      /// The validated batch, carried forward to the confirm step. Re-validated
+      /// server-side before anything is written; nothing here is trusted.
+      payload: string;
       rows: PreviewRow[];
+      sections: SectionCount[];
+      /// Sheets that were read but are not question sheets. Reported so a
+      /// skipped sheet is visible rather than silently absent.
+      skipped: SkippedSheet[];
+      fileCount: number;
       total: number;
       created: number;
       updated: number;
@@ -31,39 +49,50 @@ export type ImportState =
 
 const PREVIEW_LIMIT = 200;
 
+function summarizeSections(rows: { section: string }[]): SectionCount[] {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    counts.set(row.section, (counts.get(row.section) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([sectionCode, count]) => ({ sectionCode, count }))
+    .sort((a, b) => a.sectionCode.localeCompare(b.sectionCode));
+}
+
 export async function previewImport(
   _prev: ImportState,
   formData: FormData,
 ): Promise<ImportState> {
   await requireAdmin();
 
-  const file = formData.get("file");
+  // Any number of files: one, seven, or a hundred. Nothing here assumes a
+  // particular count, and a file may carry rows for several sections.
+  const files = formData.getAll("files").filter((entry): entry is File => entry instanceof File);
 
-  if (!(file instanceof File)) {
-    return { stage: "invalid", errors: [{ row: 0, field: "file", message: "Choose a CSV file to upload." }] };
+  if (files.length === 0) {
+    return {
+      stage: "invalid",
+      errors: [{ row: 0, field: "file", message: "Choose at least one file to upload." }],
+      skipped: [],
+    };
   }
 
-  const fileError = validateFile(file);
-  if (fileError) {
-    return { stage: "invalid", errors: [{ row: 0, field: "file", message: fileError }] };
-  }
-
-  const csv = await file.text();
-  const parsed = parseQuestionCsv(csv);
+  const parsed = await parseQuestionFiles(files);
 
   if (!parsed.ok) {
-    return { stage: "invalid", errors: parsed.errors };
+    return { stage: "invalid", errors: parsed.errors, skipped: parsed.skipped };
   }
 
   const existing = await countExisting(parsed.rows.map((row) => row.id));
 
   return {
     stage: "preview",
-    csv,
-    rows: parsed.rows.slice(0, PREVIEW_LIMIT).map((row, index) => ({
-      row: index + 2,
+    payload: JSON.stringify(parsed.rows),
+    rows: parsed.rows.slice(0, PREVIEW_LIMIT).map((row) => ({
       id: row.id,
-      section: row.section,
+      sectionCode: row.section,
       topic: row.topic,
       question: row.question,
       difficulty: row.difficulty,
@@ -71,6 +100,9 @@ export async function previewImport(
       marks: row.marks,
       status: row.status,
     })),
+    sections: summarizeSections(parsed.rows),
+    skipped: parsed.skipped,
+    fileCount: files.length,
     total: parsed.rows.length,
     created: parsed.rows.length - existing,
     updated: existing,
@@ -83,23 +115,48 @@ export async function confirmImport(
 ): Promise<ImportState> {
   await requireAdmin();
 
-  const csv = formData.get("csv");
+  const payload = formData.get("payload");
 
-  if (typeof csv !== "string" || csv === "") {
-    return { stage: "invalid", errors: [{ row: 0, field: "file", message: "Upload the CSV again before importing." }] };
+  if (typeof payload !== "string" || payload === "") {
+    return {
+      stage: "invalid",
+      errors: [{ row: 0, field: "file", message: "Upload the files again before importing." }],
+      skipped: [],
+    };
   }
 
-  // Re-parsed and re-validated here: the preview counts came from the browser
-  // and nothing the client returns is trusted.
-  const parsed = parseQuestionCsv(csv);
+  // The payload made a round trip through the browser, so it is untrusted input
+  // however it was produced. Every row is rebuilt and re-validated here before
+  // anything is written.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return {
+      stage: "invalid",
+      errors: [{ row: 0, field: "file", message: "Upload the files again before importing." }],
+      skipped: [],
+    };
+  }
 
-  if (!parsed.ok) {
-    return { stage: "invalid", errors: parsed.errors };
+  const rows = verifyRows(parsed);
+
+  if (!rows) {
+    return {
+      stage: "invalid",
+      errors: [
+        {
+          row: 0,
+          field: "file",
+          message: "The upload could not be confirmed. Please upload the files again.",
+        },
+      ],
+      skipped: [],
+    };
   }
 
   try {
-    const summary = await importQuestions(parsed.rows);
-    console.info(`Question bank import committed: ${summary.created} created, ${summary.updated} updated.`);
+    const summary = await importQuestions(rows);
     return { stage: "done", ...summary };
   } catch (error) {
     console.error("Question bank import failed and was rolled back.", {
@@ -108,6 +165,7 @@ export async function confirmImport(
     return {
       stage: "invalid",
       errors: [{ row: 0, field: "file", message: "The import failed and no questions were changed." }],
+      skipped: [],
     };
   }
 }

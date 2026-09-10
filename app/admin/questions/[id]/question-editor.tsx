@@ -7,18 +7,20 @@ import { AlertTriangle, Save } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input, ReadOnlyValue, Select, Textarea } from "@/components/ui/field";
+import { Input, ReadOnlyValue, Textarea } from "@/components/ui/field";
 import { useActionToast } from "@/components/ui/toast";
+import { ThemeSelect } from "@/components/ui/theme-select";
 
 import { saveQuestion, toggleActive, type EditState } from "./actions";
 
 export type EditableQuestion = {
   id: string;
-  section: number;
+  section: string;
   topic: string;
   difficulty: string;
   question: string;
   codeBlock: string;
+  verifyCode: string;
   optionA: string;
   optionB: string;
   optionC: string;
@@ -35,40 +37,11 @@ export type EditableQuestion = {
   isActive: boolean;
 };
 
-/// Section 7 must carry a lesson; section 8 is never scored. Both rules are
-/// enforced on the server — these constants only let the form show the right
-/// fields, never decide whether a submission is valid.
-const LESSON_SECTION = 7;
-const UNSCORED_SECTION = 8;
-
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
 type OptionLetter = (typeof OPTION_LETTERS)[number];
 
-/// The exam blueprint's marks per question, shown as guidance beside the marks
-/// field. Deliberately not enforced: the server validates marks against
-/// `scored`, not against the section, and tightening that here would be a
-/// business-rule change rather than a redesign.
-const BLUEPRINT_MARKS: Record<number, string> = {
-  1: "1",
-  2: "1",
-  3: "1",
-  4: "1.5",
-  5: "1.5",
-  6: "2",
-  7: "2.5",
-  8: "0",
-};
-
-const SECTION_NAMES: Record<number, string> = {
-  1: "Logic & Patterns",
-  2: "Number Reasoning",
-  3: "Programming Fundamentals",
-  4: "Output Prediction",
-  5: "Debugging",
-  6: "Steps Problem Solving",
-  7: "Learn-and-Apply",
-  8: "Attitude",
-};
+/// One selectable section, as the blueprint describes it.
+export type SectionOption = { code: string; name: string; marksPerQuestion: number };
 
 /// One labelled control with its helper text and its error.
 ///
@@ -185,9 +158,14 @@ function Checkbox({
 export function QuestionEditor({
   question,
   sections,
+  lessonSection,
 }: {
   question: EditableQuestion;
-  sections: readonly number[];
+  /// Supplied by the server page from the exam blueprint, so this component
+  /// holds no copy of the section list, its names or its marks.
+  sections: readonly SectionOption[];
+  /// The section drawn as whole lessons.
+  lessonSection: string;
 }) {
   const [state, save, saving] = useActionState<EditState, FormData>(saveQuestion, {
     status: "idle",
@@ -201,7 +179,12 @@ export function QuestionEditor({
   // Mirrored so the form can show the right fields as the admin works. The
   // submitted values are what the server validates; this only drives display.
   const [section, setSection] = useState(question.section);
-  const [scored, setScored] = useState(question.scored);
+  // ThemeSelect is controlled, unlike the native `<select>` these replace, so
+  // each needs a value to control even where nothing else reacts to it.
+  const [difficulty, setDifficulty] = useState(question.difficulty);
+  const [status, setStatus] = useState(question.status);
+  // Preserved as authored; every active section is scored.
+  const scored = question.scored;
   const [correct, setCorrect] = useState(question.correct);
   const [options, setOptions] = useState({
     A: question.optionA,
@@ -235,8 +218,8 @@ export function QuestionEditor({
       : null,
   );
 
-  const isLesson = section === LESSON_SECTION;
-  const isUnscored = section === UNSCORED_SECTION;
+  const isLesson = section === lessonSection;
+  const blueprintMarks = sections.find((entry) => entry.code === section) ?? null;
   // Lesson values on a non-7 question are shown rather than silently dropped:
   // hiding a field that still holds data is how data goes missing unnoticed.
   const strayLesson = !isLesson && Boolean(question.lessonText || question.lessonGroup);
@@ -301,20 +284,18 @@ export function QuestionEditor({
           <div className="grid gap-4 sm:grid-cols-3">
             <Field id={fieldId("section")} label="Section" required error={errorFor("section")}>
               {({ id, describedBy, invalid }) => (
-                <Select
+                <ThemeSelect
                   id={id}
                   name="section"
-                  value={String(section)}
-                  onChange={(event) => setSection(Number(event.target.value))}
+                  value={section}
+                  onChange={setSection}
                   aria-describedby={describedBy}
                   invalid={invalid}
-                >
-                  {sections.map((value) => (
-                    <option key={value} value={value}>
-                      {value} — {SECTION_NAMES[value] ?? "Section"}
-                    </option>
-                  ))}
-                </Select>
+                  options={sections.map((option) => [
+                    option.code,
+                    `${option.code} — ${option.name}`,
+                  ])}
+                />
               )}
             </Field>
 
@@ -325,17 +306,19 @@ export function QuestionEditor({
               error={errorFor("difficulty")}
             >
               {({ id, describedBy, invalid }) => (
-                <Select
+                <ThemeSelect
                   id={id}
                   name="difficulty"
-                  defaultValue={question.difficulty}
+                  value={difficulty}
+                  onChange={setDifficulty}
                   aria-describedby={describedBy}
                   invalid={invalid}
-                >
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </Select>
+                  options={[
+                    ["easy", "Easy"],
+                    ["medium", "Medium"],
+                    ["hard", "Hard"],
+                  ]}
+                />
               )}
             </Field>
 
@@ -350,17 +333,19 @@ export function QuestionEditor({
               hint="Authoring workflow only."
             >
               {({ id, describedBy, invalid }) => (
-                <Select
+                <ThemeSelect
                   id={id}
                   name="status"
-                  defaultValue={question.status}
+                  value={status}
+                  onChange={setStatus}
                   aria-describedby={describedBy}
                   invalid={invalid}
-                >
-                  <option value="draft">Draft</option>
-                  <option value="review">Review</option>
-                  <option value="ready">Ready</option>
-                </Select>
+                  options={[
+                    ["draft", "Draft"],
+                    ["review", "Review"],
+                    ["ready", "Ready"],
+                  ]}
+                />
               )}
             </Field>
           </div>
@@ -502,6 +487,30 @@ export function QuestionEditor({
           </Field>
         </Group>
 
+        <Group
+          title="Internal verification"
+          description="Admin reference only. Never sent to a candidate's browser."
+        >
+          <Field
+            id={fieldId("verifyCode")}
+            label="Verify code"
+            hint="Optional. Carried in from the source file for internal checking."
+            error={errorFor("verifyCode")}
+          >
+            {({ id, describedBy, invalid }) => (
+              <Textarea
+                id={id}
+                name="verifyCode"
+                defaultValue={question.verifyCode}
+                rows={3}
+                aria-describedby={describedBy}
+                invalid={invalid}
+                className="min-h-[4.5rem] font-mono text-[13px] leading-6"
+              />
+            )}
+          </Field>
+        </Group>
+
         {/* Rendered only for section 7, or when a non-7 question still carries
             lesson data. In the latter case the inputs stay mounted so saving
             cannot quietly blank values the form is not showing. */}
@@ -566,30 +575,11 @@ export function QuestionEditor({
         )}
 
         <Group title="Scoring">
-          {isUnscored ? (
-            <Alert tone="info">
-              Section {UNSCORED_SECTION} is stored for review but never scored, so it must be
-              unscored with marks of 0.
-            </Alert>
-          ) : null}
-
-          <Checkbox
-            name="scored"
-            label="Scored"
-            hint={
-              isUnscored
-                ? `Section ${UNSCORED_SECTION} questions cannot be scored.`
-                : "Unscored questions must have marks of 0; scored questions must have marks above 0."
-            }
-            checked={isUnscored ? false : scored}
-            onChange={setScored}
-          />
-          {errorFor("scored") ? (
-            <p className="flex gap-1.5 text-[13px] text-danger">
-              <AlertTriangle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              <span>{errorFor("scored")}</span>
-            </p>
-          ) : null}
+          {/* Every active section is scored, so `scored` is no longer a choice.
+              It is still submitted so a question that predates the seven-section
+              exam keeps the value it was authored with rather than being
+              silently flipped on save. */}
+          <input type="hidden" name="scored" value={scored ? "true" : "false"} />
 
           <div className="sm:max-w-[220px]">
             <Field
@@ -598,8 +588,8 @@ export function QuestionEditor({
               required
               error={errorFor("marks")}
               hint={
-                BLUEPRINT_MARKS[section]
-                  ? `The exam blueprint uses ${BLUEPRINT_MARKS[section]} for section ${section}.`
+                blueprintMarks
+                  ? `The exam blueprint uses ${blueprintMarks.marksPerQuestion} for ${blueprintMarks.name}.`
                   : undefined
               }
             >

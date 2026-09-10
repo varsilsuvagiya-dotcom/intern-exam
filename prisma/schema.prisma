@@ -39,11 +39,20 @@ enum AttemptStatus {
 /// re-importing a row updates it in place instead of creating a duplicate.
 model Question {
   id              String         @id
-  section         Int
+  /// The canonical section code, and only ever one of the seven the exam
+  /// blueprint defines: LOG, NUM, JS, OUT, BUG, STP or LRN. The set of valid
+  /// values is the blueprint's, enforced by the importer and the admin editor
+  /// rather than by a database enum, so adding a section does not require a
+  /// type migration.
+  ///
+  section         String
   topic           String
   difficulty      Difficulty
   question        String
   codeBlock       String?        @map("code_block")
+  /// Admin/internal verification reference. Never sent to a candidate: it is
+  /// absent from the candidate paper's select list and from CandidateQuestion.
+  verifyCode      String?        @map("verify_code")
   optionA         String         @map("option_a")
   optionB         String         @map("option_b")
   optionC         String         @map("option_c")
@@ -54,7 +63,9 @@ model Question {
   lessonText      String?        @map("lesson_text")
   /// Section 7 only: groups the 3 questions that share one lesson.
   lessonGroup     String?        @map("lesson_group")
-  /// False for section 8 (attitude), which is stored but never scored.
+  /// Every active section is scored, so this is true for every question the
+  /// current exam can draw. It is retained because AttemptQuestion snapshots a
+  /// copy of it, and historical scoring reads that snapshot.
   scored          Boolean        @default(true)
   marks           Decimal        @db.Decimal(4, 2)
   aiVerified      Boolean        @default(false) @map("ai_verified")
@@ -154,6 +165,9 @@ model AttemptQuestion {
   id                  String      @id @default(uuid())
   attemptId           String      @map("attempt_id")
   questionId          String      @map("question_id")
+  /// The section's historical number, not its code. This is a snapshot of the
+  /// paper as drawn: it stays an Int so papers sat under the previous
+  /// eight-section structure remain readable exactly as they were recorded.
   section             Int
   displayOrder        Int         @map("display_order")
   /// Option order used for this attempt, e.g. [c, a, d, b].

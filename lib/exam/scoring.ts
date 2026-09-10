@@ -1,7 +1,12 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { SECTION_BLUEPRINT, TOTAL_MARKS, TOTAL_QUESTIONS } from "@/lib/exam-settings/exam-blueprint";
+import {
+  SECTION_BLUEPRINT,
+  TOTAL_MARKS,
+  TOTAL_QUESTIONS,
+  sectionNameByOrdinal,
+} from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 /// Scoring for a finalized attempt.
@@ -48,7 +53,9 @@ function fromHundredths(value: number): string {
 }
 
 export type SectionScore = {
+  /// The historical ordinal the paper was drawn under.
   section: number;
+  code: string;
   name: string;
   /// Marks achieved.
   score: string;
@@ -74,7 +81,12 @@ export type ScoreResult =
   | { kind: "not-finalized" }
   /// The stored paper does not describe a valid exam. Nothing is written and
   /// the problems are reported rather than silently clamped away.
-  | { kind: "invalid-paper"; problems: string[] };
+  | { kind: "invalid-paper"; problems: string[] }
+  /// The stored paper does not match the active blueprint, because it was drawn
+  /// under an earlier exam structure. Its stored result stays exactly as it is:
+  /// re-scoring it against today's rules would produce a different, wrong
+  /// number for an exam the candidate already sat.
+  | { kind: "incompatible-blueprint"; expected: number; found: number };
 
 type ScoredRow = {
   attemptQuestionId: string;
@@ -113,11 +125,12 @@ export function computeScore(
   let totalHundredths = 0;
 
   for (const blueprint of SECTION_BLUEPRINT) {
-    const inSection = questions.filter((question) => question.section === blueprint.section);
+    // A drawn paper records the ordinal, so the snapshot is matched on that.
+    const inSection = questions.filter((question) => question.section === blueprint.ordinal);
 
     if (inSection.length !== blueprint.questionCount) {
       problems.push(
-        `section ${blueprint.section} has ${inSection.length} questions, expected ${blueprint.questionCount}`,
+        `section ${blueprint.code} has ${inSection.length} questions, expected ${blueprint.questionCount}`,
       );
     }
 
@@ -171,14 +184,15 @@ export function computeScore(
 
     if (sectionHundredths > maxHundredths) {
       problems.push(
-        `section ${blueprint.section} scored ${fromHundredths(sectionHundredths)}, above its maximum of ${fromHundredths(maxHundredths)}`,
+        `section ${blueprint.code} scored ${fromHundredths(sectionHundredths)}, above its maximum of ${fromHundredths(maxHundredths)}`,
       );
     }
 
     totalHundredths += sectionHundredths;
 
     sections.push({
-      section: blueprint.section,
+      section: blueprint.ordinal,
+      code: blueprint.code,
       name: blueprint.name,
       score: fromHundredths(sectionHundredths),
       maxScore: fromHundredths(maxHundredths),
@@ -191,10 +205,12 @@ export function computeScore(
 
   // A question outside the blueprint would never be counted into any section,
   // so its absence from the totals has to be caught here rather than ignored.
-  const known = new Set(SECTION_BLUEPRINT.map((entry) => entry.section));
+  const known = new Set(SECTION_BLUEPRINT.map((entry) => entry.ordinal));
   for (const question of questions) {
     if (!known.has(question.section)) {
-      problems.push(`question ${question.id} is in unknown section ${question.section}`);
+      problems.push(
+        `question ${question.id} is in unknown section ${sectionNameByOrdinal(question.section)}`,
+      );
     }
   }
 
@@ -242,6 +258,20 @@ export async function scoreAttempt(attemptId: string): Promise<ScoreResult> {
       answer: { select: { selectedOption: true, textAnswer: true } },
     },
   });
+
+  // A paper drawn under an earlier exam structure is not re-scored. The active
+  // blueprint would count a different number of questions and would not
+  // recognise the removed section at all, so recomputing would overwrite a
+  // real result with a wrong one. The stored score stays exactly as it is and
+  // remains readable; only the recomputation is refused.
+  if (questions.length !== TOTAL_QUESTIONS) {
+    console.warn("Scoring skipped: the stored paper predates the active exam structure.", {
+      attemptId,
+      expected: TOTAL_QUESTIONS,
+      found: questions.length,
+    });
+    return { kind: "incompatible-blueprint", expected: TOTAL_QUESTIONS, found: questions.length };
+  }
 
   const computed = computeScore(questions);
 

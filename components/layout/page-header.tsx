@@ -100,3 +100,18 @@ export function PageBody({
     <main className={`w-full min-w-0 px-4 py-8 lg:px-6 lg:py-10 ${max}`}>{children}</main>
   );
 }
+
+/// Wraps a whole-page `EmptyState` — error, not-found — so it fills and
+/// centers in the available content area instead of sitting as a small card
+/// pinned to the top-left of a form-width column with dead space around it.
+/// Only for a state that IS the entire page; a card inside a normal page
+/// (e.g. "no questions match the filters") should use `EmptyState` directly.
+export function FullPageEmptyState({ children }: { children: ReactNode }) {
+  return (
+    <PageBody width="table">
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="w-full max-w-[480px]">{children}</div>
+      </div>
+    </PageBody>
+  );
+}

@@ -2,7 +2,7 @@
 
 import { RotateCcw, TriangleAlert } from "lucide-react";
 
-import { PageBody } from "@/components/layout/page-header";
+import { FullPageEmptyState } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/table";
 
@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/ui/table";
 /// handling changes; only which shell the admin sees it in.
 export default function AdminError({ reset }: { error: Error; reset: () => void }) {
   return (
-    <PageBody width="form">
+    <FullPageEmptyState>
       <EmptyState
         icon={<TriangleAlert aria-hidden="true" className="size-6" />}
         title="Something went wrong"
@@ -30,6 +30,6 @@ export default function AdminError({ reset }: { error: Error; reset: () => void 
           </Button>
         }
       />
-    </PageBody>
+    </FullPageEmptyState>
   );
 }

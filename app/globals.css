@@ -270,13 +270,15 @@ body {
   border-radius: var(--radius-sm);
 }
 
-/* Toast entrance. Motion-safe only; under reduced motion the toast simply
-   appears, and its lifetime is unchanged — shortening it would cost
-   information rather than reduce motion. */
+/* Toast entrance. Slides in from the edge the stack is anchored to (top), so
+   a new toast visibly arrives from where it is anchored rather than drifting
+   in from the opposite direction. Motion-safe only; under reduced motion the
+   toast simply appears, and its lifetime is unchanged — shortening it would
+   cost information rather than reduce motion. */
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;

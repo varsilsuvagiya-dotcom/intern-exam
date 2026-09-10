@@ -70,15 +70,12 @@ function withTimeout<T>(work: Promise<T>, ms = REQUEST_TIMEOUT_MS): Promise<T> {
 /// knows how many questions a CloudUS paper has.
 ///
 /// Unanswered question numbers are listed because a candidate deciding whether
-/// to submit needs to know *which* ones, not only how many. They are capped:
-/// with nothing answered the list would be all 55 numbers, which is a wall of
-/// digits that tells the candidate less than the count already did.
-const LIST_LIMIT = 12;
-
+/// to submit needs to know *which* ones, not only how many. They render as a
+/// number grid rather than a comma-separated sentence — the same shape as the
+/// question palette itself — so even a full paper's worth of numbers stays
+/// scannable instead of running on as a wall of prose.
 function Summary({ summary }: { summary: Ready }) {
   const unanswered = summary.unanswered.length;
-  const shown = summary.unanswered.slice(0, LIST_LIMIT);
-  const rest = unanswered - shown.length;
 
   return (
     <div className="mt-4">
@@ -108,10 +105,19 @@ function Summary({ summary }: { summary: Ready }) {
           </p>
 
           {unanswered > 0 ? (
-            <p className="exam-tabular mt-1.5 break-words opacity-90">
-              {shown.join(", ")}
-              {rest > 0 ? ` and ${rest} more` : ""}
-            </p>
+            <ol
+              aria-label="Unanswered question numbers"
+              className="exam-tabular mt-2 grid grid-cols-[repeat(auto-fill,minmax(2.25rem,1fr))] gap-1"
+            >
+              {summary.unanswered.map((number) => (
+                <li
+                  key={number}
+                  className="flex h-7 items-center justify-center rounded-exam-sm border border-current/25 text-[12px] font-medium"
+                >
+                  {number}
+                </li>
+              ))}
+            </ol>
           ) : null}
         </div>
       </div>

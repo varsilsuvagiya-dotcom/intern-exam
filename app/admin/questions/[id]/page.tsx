@@ -10,7 +10,7 @@ import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { Chip } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/db";
-import { VALID_SECTIONS } from "@/lib/question-bank/csv-contract";
+import { LESSON_SECTION, SECTION_BLUEPRINT } from "@/lib/exam-settings/exam-blueprint";
 
 import { QuestionEditor } from "./question-editor";
 
@@ -47,14 +47,19 @@ export default async function QuestionDetailPage({
           identifies itself without the admin having to read the controls. */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs break-all text-muted">{question.id}</span>
-        <Chip>Section {question.section}</Chip>
+        <Chip>{question.section}</Chip>
         <DifficultyChip difficulty={question.difficulty} />
         <QuestionStatusBadge status={question.status} />
         <QuestionActiveBadge isActive={question.isActive} />
       </div>
 
       <QuestionEditor
-        sections={VALID_SECTIONS}
+        sections={SECTION_BLUEPRINT.map((entry) => ({
+          code: entry.code,
+          name: entry.name,
+          marksPerQuestion: entry.marksPerQuestion,
+        }))}
+        lessonSection={LESSON_SECTION}
         question={{
           id: question.id,
           section: question.section,
@@ -62,6 +67,7 @@ export default async function QuestionDetailPage({
           difficulty: question.difficulty,
           question: question.question,
           codeBlock: question.codeBlock ?? "",
+          verifyCode: question.verifyCode ?? "",
           optionA: question.optionA,
           optionB: question.optionB,
           optionC: question.optionC,

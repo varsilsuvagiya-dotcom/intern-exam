@@ -4,6 +4,7 @@ import type { CandidateQuestion } from "@/lib/exam/candidate-paper";
 
 import { ExamChip } from "@/components/exam/surface";
 
+import { CodeBlock } from "./code-block";
 import { FreeTextAnswer } from "./free-text-answer";
 import { LessonPanel, type LessonPosition } from "./lesson-panel";
 
@@ -83,18 +84,7 @@ export function QuestionDisplay({
         {question.questionText}
       </p>
 
-      {question.codeBlock ? (
-        // `min-w-0` on the article's children is what keeps a long code line
-        // scrolling inside this box instead of widening the page.
-        <pre
-          tabIndex={0}
-          role="group"
-          aria-label="Code for this question"
-          className="mt-4 max-w-full overflow-x-auto rounded-exam-md border border-exam-line bg-exam-subtle p-4 font-mono text-[13px] leading-[1.7] text-exam-ink"
-        >
-          <code>{question.codeBlock}</code>
-        </pre>
-      ) : null}
+      {question.codeBlock ? <CodeBlock code={question.codeBlock} /> : null}
 
       {question.freeText ? (
         <FreeTextAnswer

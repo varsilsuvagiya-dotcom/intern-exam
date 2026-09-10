@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
+"use client";
+
+import type { FormEvent, ReactNode } from "react";
 
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { Button, buttonClass } from "@/components/ui/button";
@@ -9,9 +12,14 @@ import { ThemeSelect } from "@/components/ui/theme-select";
 
 /// The filter toolbar shared by the admin list pages.
 ///
-/// A plain GET form: filters live in the URL, so a view is refreshable,
-/// shareable and survives browser back/forward. This deliberately stays
-/// server-driven rather than becoming client state.
+/// Filters still live in the URL, so a view stays refreshable, shareable and
+/// survives browser back/forward — the query string is built exactly as a
+/// native GET form would build it. The one difference is *how* that URL is
+/// reached: submitting goes through the router's client-side navigation
+/// (`router.push`) instead of a real form submission, which would otherwise
+/// force a full browser page load (a document unload, every layout
+/// remounting, the network waterfall starting from zero) for what is, from
+/// the App Router's point of view, just another server-rendered page.
 export function FilterBar({
   resetHref,
   hidden,
@@ -23,9 +31,28 @@ export function FilterBar({
   hidden?: ReactNode;
   children: ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = new URLSearchParams();
+    for (const [key, value] of new FormData(event.currentTarget)) {
+      // Empty fields (an unselected "All", a blank search box) would
+      // otherwise serialize as `key=`, which is not how the page's own links
+      // build a query: an absent param and an empty one both mean "no
+      // filter", but omitting it keeps the URL itself just as clean.
+      if (typeof value === "string" && value !== "") {
+        query.append(key, value);
+      }
+    }
+    const search = query.toString();
+    router.push(search ? `${pathname}?${search}` : pathname);
+  }
+
   return (
     <form
-      method="get"
+      onSubmit={handleSubmit}
       className="rounded-lg border border-line bg-surface p-4"
       role="search"
     >

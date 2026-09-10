@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { FileQuestion } from "lucide-react";
 
-import { PageBody } from "@/components/layout/page-header";
+import { FullPageEmptyState } from "@/components/layout/page-header";
 import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/table";
 
 export default function QuestionNotFound() {
   return (
-    <PageBody width="form">
+    <FullPageEmptyState>
       <EmptyState
         icon={<FileQuestion aria-hidden="true" className="size-6" />}
         title="Question not found"
@@ -18,6 +18,6 @@ export default function QuestionNotFound() {
           </Link>
         }
       />
-    </PageBody>
+    </FullPageEmptyState>
   );
 }

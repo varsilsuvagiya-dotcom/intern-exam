@@ -7,7 +7,8 @@ import { AlertTriangle, Save } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/field";
+import { Input } from "@/components/ui/field";
+import { ThemeSelect } from "@/components/ui/theme-select";
 import { useActionToast } from "@/components/ui/toast";
 
 import { saveSettings, type SettingsState } from "./actions";
@@ -33,11 +34,11 @@ function Group({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="rounded-lg border border-line bg-surface p-4 lg:p-5">
-      <legend className="px-1 text-[13px] font-semibold text-ink">{title}</legend>
+    <div className="rounded-lg border border-line bg-surface p-4 lg:p-5">
+      <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
       <p className="mt-1 text-[13px] text-muted">{description}</p>
       <div className="mt-4">{children}</div>
-    </fieldset>
+    </div>
   );
 }
 
@@ -117,11 +118,22 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
   const formError = errorFor("form");
   const failed = state.status === "error";
 
+  // "All changes saved." must stop being true the moment any field changes
+  // again, or it keeps claiming the form matches the database after the admin
+  // has already picked a different exam status, typed a new duration, and so
+  // on. `state.status` alone cannot tell dirty from clean — it only flips back
+  // to "saved" on the next successful submit — so dirtiness is tracked here
+  // and cleared each time a save actually lands.
+  const [dirty, setDirty] = useState(false);
+  const clean = state.status === "saved" && !dirty;
+
   // Derived from the action's own result, so a toast cannot report a save the
   // server did not perform.
-  useActionToast(state, (current) =>
-    current.status === "saved" ? { tone: "success", message: "Settings saved." } : null,
-  );
+  useActionToast(state, (current) => {
+    if (current.status !== "saved") return null;
+    setDirty(false);
+    return { tone: "success", message: "Settings saved." };
+  });
 
   const open = status === "open";
 
@@ -133,7 +145,12 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
   const total = values.every(Number.isInteger) ? values[0] + values[1] + values[2] : null;
 
   return (
-    <form action={save} className="space-y-4" noValidate>
+    <form
+      action={save}
+      onChange={() => setDirty(true)}
+      className="space-y-4"
+      noValidate
+    >
       {/* Reported at the top as well as beside each field, so a failure is
           visible without hunting through the form. */}
       {failed ? (
@@ -160,17 +177,24 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
         <div className="sm:max-w-[260px]">
           <Field id={fieldId("status")} label="Exam status" error={errorFor("status")}>
             {({ id, describedBy, invalid }) => (
-              <Select
+              <ThemeSelect
                 id={id}
                 name="status"
                 value={status}
-                onChange={(event) => setStatus(event.target.value)}
+                onChange={(next) => {
+                  setStatus(next);
+                  // ThemeSelect's own click never bubbles a native `change`
+                  // event, so the form's onChange (which marks the page dirty)
+                  // would never see this. Told directly instead.
+                  setDirty(true);
+                }}
                 aria-describedby={describedBy}
                 invalid={invalid}
-              >
-                <option value="closed">Closed</option>
-                <option value="open">Open</option>
-              </Select>
+                options={[
+                  ["closed", "Closed"],
+                  ["open", "Open"],
+                ]}
+              />
             )}
           </Field>
         </div>
@@ -305,7 +329,7 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
             ? "Saving…"
             : failed
               ? "Not saved — see the errors above."
-              : state.status === "saved"
+              : clean
                 ? "All changes saved."
                 : ""}
         </p>

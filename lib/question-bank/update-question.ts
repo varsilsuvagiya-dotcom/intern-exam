@@ -3,22 +3,24 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import type { Difficulty, OptionKey, QuestionStatus } from "@/lib/generated/prisma/enums";
 
+import { VALID_SECTIONS, isSectionCode } from "@/lib/exam-settings/exam-blueprint";
+
 import {
   DIFFICULTY_VALUES,
   MAX_TOPIC_LENGTH,
   OPTION_VALUES,
   STATUS_VALUES,
-  VALID_SECTIONS,
   describeAccepted,
 } from "./csv-contract";
 import { validateMarks, validateQuestionRules, type FieldError } from "./question-rules";
 
 export type QuestionEdit = {
-  section: number;
+  section: string;
   topic: string;
   difficulty: Difficulty;
   question: string;
   codeBlock: string | null;
+  verifyCode: string | null;
   optionA: string;
   optionB: string;
   optionC: string;
@@ -54,9 +56,8 @@ export function validateQuestionEdit(form: FormData): EditValidation {
     return value;
   };
 
-  const sectionRaw = text("section");
-  const section = Number(sectionRaw);
-  if (!VALID_SECTIONS.includes(section as (typeof VALID_SECTIONS)[number])) {
+  const section = text("section").toUpperCase();
+  if (!isSectionCode(section)) {
     errors.push({ field: "section", message: `Section must be one of ${VALID_SECTIONS.join(", ")}` });
   }
 
@@ -97,7 +98,7 @@ export function validateQuestionEdit(form: FormData): EditValidation {
   const lessonGroup = text("lessonGroup") || null;
 
   if (errors.length === 0) {
-    errors.push(...validateQuestionRules({ section, scored, marks, lessonText, lessonGroup }));
+    errors.push(...validateQuestionRules({ section, marks, lessonText }));
   }
 
   if (errors.length > 0) {
@@ -112,6 +113,7 @@ export function validateQuestionEdit(form: FormData): EditValidation {
       difficulty: difficulty as Difficulty,
       question,
       codeBlock: text("codeBlock") || null,
+      verifyCode: text("verifyCode") || null,
       optionA,
       optionB,
       optionC,
