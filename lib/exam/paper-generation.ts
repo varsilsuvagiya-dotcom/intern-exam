@@ -20,6 +20,7 @@ import {
   type DifficultyCounts,
   type DifficultyMix,
 } from "./difficulty-allocation";
+import { getQuestionPool } from "./question-pool";
 
 const OPTION_KEYS: OptionKey[] = ["a", "b", "c", "d"];
 
@@ -317,27 +318,11 @@ export async function ensureExamPaper(
     hard: settings.hardPercent,
   };
 
-  // Only ready, active questions are eligible, per the requirements.
-  const pool = await prisma.question.findMany({
-    where: { status: "ready", isActive: true },
-    select: {
-      id: true,
-      section: true,
-      difficulty: true,
-      question: true,
-      codeBlock: true,
-      optionA: true,
-      optionB: true,
-      optionC: true,
-      optionD: true,
-      correct: true,
-      explanation: true,
-      lessonText: true,
-      lessonGroup: true,
-      marks: true,
-      scored: true,
-    },
-  });
+  // Only ready, active questions are eligible, per the requirements. The read
+  // is shared across concurrent starts and briefly cached — see question-pool
+  // for why that cannot produce an invalid paper. The filtering rule itself is
+  // unchanged: the cache stores exactly the ready + active set.
+  const pool = await getQuestionPool();
 
   const blueprintFor = new Map(SECTION_BLUEPRINT.map((entry) => [entry.code as string, entry]));
 

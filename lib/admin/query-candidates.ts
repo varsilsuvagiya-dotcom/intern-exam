@@ -9,8 +9,8 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 /// `parseFilters`, which maps unrecognised input to a safe default rather than
 /// passing it on, so a hand-edited query string cannot steer the query.
 
-export const PAGE_SIZES = [25, 50, 100] as const;
-export const DEFAULT_PAGE_SIZE = 25;
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
+export const DEFAULT_PAGE_SIZE = 10;
 
 export type CandidateFilters = {
   search: string;

@@ -36,7 +36,7 @@ export default async function CandidatesPage({
   const pageLink = (page: number): string => {
     const query = new URLSearchParams();
     if (filters.search) query.set("q", filters.search);
-    if (filters.pageSize !== 25) query.set("pageSize", String(filters.pageSize));
+    if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
     query.set("page", String(page));
     return `/admin/candidates?${query}`;
   };

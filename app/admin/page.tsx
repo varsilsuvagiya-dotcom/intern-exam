@@ -12,6 +12,7 @@ import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { DEFAULT_SORT, listAttempts } from "@/lib/admin/query-attempts";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getExamSettings } from "@/lib/exam-settings";
+import { countPendingScoring } from "@/lib/exam/pending-scoring";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -41,6 +42,11 @@ export default async function AdminPage() {
   await requireAdmin();
 
   const settings = await getExamSettings();
+
+  // A submitted attempt with no score is the one failure a candidate cannot see
+  // and cannot fix. Counted here so it is visible on the page an administrator
+  // already opens, rather than only in server logs.
+  const pendingScoring = await countPendingScoring();
 
   // The existing list query, asked for the newest page of five. No new query is
   // introduced, and the ordering is the one the Attempts page already uses.
@@ -73,6 +79,20 @@ export default async function AdminPage() {
           </Link>
         </Alert>
       )}
+
+      {/* Submission never depends on scoring succeeding, so a scoring failure
+          leaves a real submitted attempt without a result. The candidate sees
+          nothing wrong. This is the only place that says so. */}
+      {pendingScoring > 0 ? (
+        <Alert tone="warning" title="Attempts are waiting to be scored" className="mb-4">
+          <span className="tabular">{pendingScoring}</span>{" "}
+          {pendingScoring === 1 ? "attempt was" : "attempts were"} submitted but could not be
+          scored. Scoring is retried automatically and answers are unaffected.{" "}
+          <Link href="/admin/attempts?scoring=pending" className="font-medium underline">
+            Review them
+          </Link>
+        </Alert>
+      ) : null}
 
       <section
         aria-labelledby="exam-status"

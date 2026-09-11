@@ -10,7 +10,28 @@ import { fetchTiming } from "./actions";
 
 /// Re-synced with the server this often. The countdown between syncs is only a
 /// display: the server's deadline is what actually governs the exam.
-const RESYNC_MS = 30_000;
+///
+/// Five minutes, not thirty seconds. The deadline is fixed at
+/// `startedAt + durationMinutes` and cannot move while the exam runs, so the
+/// countdown does not need the server to tell it what it already knows — it
+/// counts from a measured clock offset, and an offset does not drift
+/// meaningfully over an hour. At thirty seconds this poll was 150 requests per
+/// candidate per sitting and, at 3 queries each, roughly 40% of all database
+/// traffic the exam produced: the single largest source of load in the system,
+/// spent re-deriving a constant.
+///
+/// It is reduced rather than removed, because the poll does one thing the
+/// countdown cannot do for itself: notice that the attempt has stopped being
+/// live — finalized elsewhere, session expired, removed by an administrator —
+/// and stop accepting answers. Five minutes bounds how long a candidate can
+/// keep typing into an exam that is already over, while cutting the traffic by
+/// a factor of ten.
+///
+/// None of this weakens the deadline. Every write is still refused server-side
+/// once `computeTiming` says the attempt has expired, and submission still
+/// decides its own status from the server clock. The timer is a display; the
+/// server remains the authority.
+const RESYNC_MS = 300_000;
 
 /// The one threshold this component has ever had. It is a presentation
 /// threshold, not a business rule — nothing server-side changes at ten

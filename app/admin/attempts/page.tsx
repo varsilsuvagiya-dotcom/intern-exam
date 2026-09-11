@@ -39,7 +39,7 @@ export default async function AttemptsPage({
     if (filters.scoring) query.set("scoring", filters.scoring);
     if (result.candidate) query.set("candidate", result.candidate.id);
     if (filters.sort !== "newest") query.set("sort", filters.sort);
-    if (filters.pageSize !== 25) query.set("pageSize", String(filters.pageSize));
+    if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
     query.set("page", String(page));
     return `/admin/attempts?${query}`;
   };

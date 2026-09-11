@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { invalidateQuestionPool } from "@/lib/exam/question-pool";
 import type { FieldError } from "@/lib/question-bank/question-rules";
 import {
   setQuestionActive,
@@ -51,6 +52,9 @@ export async function saveQuestion(_prev: EditState, formData: FormData): Promis
 
   revalidatePath(`/admin/questions/${id}`);
   revalidatePath("/admin/questions");
+  // An edit can change a question's text, marks or eligibility, so a new
+  // paper must not keep drawing the old copy from this process's cache.
+  invalidateQuestionPool();
   return { status: "saved" };
 }
 
@@ -79,5 +83,8 @@ export async function toggleActive(_prev: EditState, formData: FormData): Promis
 
   revalidatePath(`/admin/questions/${id}`);
   revalidatePath("/admin/questions");
+  // An edit can change a question's text, marks or eligibility, so a new
+  // paper must not keep drawing the old copy from this process's cache.
+  invalidateQuestionPool();
   return { status: "saved" };
 }

@@ -16,8 +16,8 @@ import { DIFFICULTY_VALUES, STATUS_VALUES } from "./csv-contract";
 export const READINESS_VALUES = ["ready-to-activate", "not-ready"] as const;
 export type Readiness = (typeof READINESS_VALUES)[number];
 
-export const PAGE_SIZES = [25, 50, 100] as const;
-export const DEFAULT_PAGE_SIZE = 25;
+export const PAGE_SIZES = [10, 25, 50, 100] as const;
+export const DEFAULT_PAGE_SIZE = 10;
 
 export type QuestionFilters = {
   search: string;

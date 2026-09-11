@@ -29,21 +29,73 @@ function readInput(form: FormData): StartInput {
   };
 }
 
+/// Discards an attempt that never got a paper.
+///
+/// An attempt row is created before its paper is drawn, so a generation failure
+/// used to leave behind an attempt that was `in_progress` with zero questions.
+/// That is worse than no attempt at all: the candidate's next start resumes it
+/// rather than creating a fresh one, so they are told they already have an exam
+/// in progress and are handed the same empty attempt again.
+///
+/// Deleting it restores the state the candidate was in before they pressed
+/// start, so retrying behaves like a first attempt. The delete is guarded on the
+/// attempt still being in progress and still having no questions, so it can
+/// never remove an attempt that has a paper or has been finalized. Answers
+/// cannot exist yet — there are no questions to answer.
+///
+/// This runs only for an attempt this call created. A resumed attempt is never
+/// discarded: its paper generation failing means an existing sitting could not
+/// be loaded, and deleting it would destroy a real exam.
+async function discardEmptyAttempt(attemptId: string): Promise<void> {
+  try {
+    const removed = await prisma.attempt.deleteMany({
+      where: {
+        id: attemptId,
+        status: "in_progress",
+        attemptQuestions: { none: {} },
+      },
+    });
+
+    if (removed.count === 0) {
+      // Left alone on purpose: something else gave it a paper or finalized it
+      // between the failure and here, so it is a real attempt now.
+      console.warn("Empty attempt was not discarded; it is no longer empty.", { attemptId });
+    }
+  } catch (error) {
+    // The candidate already has a failure to report. A cleanup that cannot run
+    // must not turn into a second, different error on top of it.
+    console.error("Could not discard an attempt whose paper generation failed.", {
+      attemptId,
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+}
+
 /// Makes sure the attempt has its paper before reporting success. A generation
 /// failure is logged with its internal reason for an admin to act on, while the
 /// candidate only ever sees the generic failure state.
-async function withPaper(attemptId: string, resumed: boolean): Promise<StartOutcome> {
+///
+/// `created` says whether this call made the attempt. Only a freshly created
+/// attempt is discarded when generation fails; a resumed one is left exactly as
+/// it was.
+async function withPaper(
+  attemptId: string,
+  resumed: boolean,
+  created: boolean,
+): Promise<StartOutcome> {
   try {
     const result = await ensureExamPaper(attemptId);
 
     if (!result.ok) {
       console.error("Exam paper could not be generated.", { failure: result.failure });
+      if (created) await discardEmptyAttempt(attemptId);
       return { kind: "failed" };
     }
   } catch (error) {
     console.error("Exam paper generation threw.", {
       name: error instanceof Error ? error.name : "UnknownError",
     });
+    if (created) await discardEmptyAttempt(attemptId);
     return { kind: "failed" };
   }
 
@@ -132,7 +184,8 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
     // Crash recovery: the same attempt continues, and startedAt is left alone so
     // the timer keeps running from the real start. The paper is ensured rather
     // than redrawn, so the candidate sees exactly what they saw before.
-    return withPaper(existing.id, true);
+    // Resumed, not created: never discarded on failure.
+    return withPaper(existing.id, true, false);
   }
 
   if (existing) {
@@ -153,7 +206,9 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
       select: { id: true },
     });
 
-    return withPaper(attempt.id, false);
+    // Created here, so an unusable attempt is cleaned up rather than left to
+    // be resumed on the candidate's next try.
+    return withPaper(attempt.id, false, true);
   } catch (error) {
     // A double-click can race two creates. The partial unique index rejects the
     // loser, whose attempt already exists, so resuming is the correct answer
@@ -164,7 +219,9 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
         select: { id: true },
       });
 
-      return attempt ? withPaper(attempt.id, true) : { kind: "failed" };
+      // The winner of the race created this attempt, not us. Treated as a
+      // resume so a concurrent start cannot delete the attempt that won.
+      return attempt ? withPaper(attempt.id, true, false) : { kind: "failed" };
     }
 
     console.error("Exam start failed.", {

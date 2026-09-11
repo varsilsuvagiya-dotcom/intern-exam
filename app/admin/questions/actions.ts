@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { invalidateQuestionPool } from "@/lib/exam/question-pool";
 import {
   NOT_READY_MESSAGE,
   type BatchProblem,
@@ -77,6 +78,10 @@ function toState(result: BulkResult, verb: string): BulkState {
 
 function refresh(): void {
   revalidatePath("/admin/questions");
+  // Activation and deactivation change which questions a new paper may draw.
+  // Dropping this process's cached pool makes the change visible here at once;
+  // other instances pick it up when their own copy expires.
+  invalidateQuestionPool();
 }
 
 export async function bulkActivate(_prev: BulkState, formData: FormData): Promise<BulkState> {

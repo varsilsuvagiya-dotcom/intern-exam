@@ -1,6 +1,7 @@
 "use server";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { invalidateQuestionPool } from "@/lib/exam/question-pool";
 import {
   parseQuestionFiles,
   type RowError,
@@ -157,6 +158,9 @@ export async function confirmImport(
 
   try {
     const summary = await importQuestions(rows);
+    // An import rewrites question rows in place, so the cached pool in this
+    // process is stale the moment it succeeds.
+    invalidateQuestionPool();
     return { stage: "done", ...summary };
   } catch (error) {
     console.error("Question bank import failed and was rolled back.", {

@@ -41,7 +41,7 @@ export default async function QuestionBankPage({
     if (filters.active !== null) query.set("active", filters.active ? "active" : "inactive");
     if (filters.scored !== null) query.set("scored", filters.scored ? "scored" : "unscored");
     if (filters.readiness !== null) query.set("readiness", filters.readiness);
-    if (filters.pageSize !== 25) query.set("pageSize", String(filters.pageSize));
+    if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
     query.set("page", String(page));
     return `/admin/questions?${query}`;
   };
