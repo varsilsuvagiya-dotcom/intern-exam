@@ -94,10 +94,7 @@ export default async function AdminPage() {
           {/* `inline-flex` with a touch height rather than a bare text link:
               on a phone this is a page action, and the design plan's 44px
               minimum applies to it. */}
-          <Link
-            href="/admin/settings"
-            className="inline-flex items-center rounded-sm text-sm font-medium text-primary hover:underline max-md:min-h-11"
-          >
+          <Link href="/admin/settings" className={buttonClass("primary", "sm")}>
             Manage settings
           </Link>
         </div>
@@ -131,10 +128,7 @@ export default async function AdminPage() {
             </p>
           </div>
           {noActivity ? null : (
-            <Link
-              href="/admin/attempts"
-              className="inline-flex items-center rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline max-md:min-h-11"
-            >
+            <Link href="/admin/attempts" className={buttonClass("primary", "sm")}>
               View all attempts
             </Link>
           )}
@@ -188,7 +182,7 @@ export default async function AdminPage() {
                       <Link
                         href={`/admin/attempts/${encodeURIComponent(attempt.id)}`}
                         aria-label={`View result for ${attempt.candidateName}`}
-                        className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
+                        className={buttonClass("primary", "sm")}
                       >
                         View result
                       </Link>

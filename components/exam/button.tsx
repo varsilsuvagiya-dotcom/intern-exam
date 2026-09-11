@@ -41,7 +41,7 @@ export const examButtonClass = (
 ): string =>
   [
     "inline-flex items-center justify-center rounded-exam-md font-medium whitespace-nowrap",
-    "transition-colors duration-[120ms] ease-out disabled:cursor-not-allowed",
+    "transition-colors duration-[120ms] ease-out cursor-pointer disabled:cursor-not-allowed",
     VARIANT[variant],
     SIZE[size],
     className,
@@ -105,7 +105,7 @@ export function ExamIconButton({
       title={label}
       className={[
         "inline-flex items-center justify-center rounded-exam-md",
-        "transition-colors duration-[120ms] ease-out disabled:cursor-not-allowed",
+        "transition-colors duration-[120ms] ease-out cursor-pointer disabled:cursor-not-allowed",
         VARIANT[variant],
         size === "lg" ? "size-12" : "size-11",
         className,

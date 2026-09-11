@@ -39,6 +39,11 @@ export type CandidateQuestion = {
 
 export type CandidatePaper = {
   candidateName: string;
+  candidateEmail: string;
+  /// A short human-quotable reference for this sitting, shown in the header so
+  /// a candidate reporting a problem can name their attempt. Derived from the
+  /// attempt id, never the candidate id.
+  attemptRef: string;
   examName: string;
   durationMinutes: number;
   questions: CandidateQuestion[];
@@ -85,7 +90,7 @@ export async function getCandidatePaper(attemptId: string): Promise<PaperAccess>
     select: {
       status: true,
       enteredName: true,
-      candidate: { select: { name: true } },
+      candidate: { select: { name: true, email: true } },
     },
   });
 
@@ -144,6 +149,10 @@ export async function getCandidatePaper(attemptId: string): Promise<PaperAccess>
       // The application record is authoritative for identity; the typed name is
       // only a fallback for a candidate whose record predates it.
       candidateName: attempt.candidate.name || attempt.enteredName || "Candidate",
+      candidateEmail: attempt.candidate.email,
+      // The uuid's first block, uppercased: enough to identify one sitting to
+      // an administrator without printing the whole identifier on screen.
+      attemptRef: attemptId.split("-")[0].toUpperCase(),
       examName: settings.examName,
       durationMinutes: settings.durationMinutes,
       questions: rows.map((row) => {

@@ -18,9 +18,20 @@ import type { SaveStatus } from "./use-autosave";
 /// Layout is one row from `md` up, and two rows below it: identity above,
 /// timer and controls below. The timer is never hidden, never shrunk and never
 /// moved off screen at any width.
+/// The candidate's initials, for the identity block's avatar.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  const first = parts[0][0];
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase();
+}
+
 export function ExamHeader({
   examName,
   candidateName,
+  candidateEmail,
+  attemptRef,
   sectionNumber,
   sectionName,
   saveStatus,
@@ -29,6 +40,8 @@ export function ExamHeader({
 }: {
   examName: string;
   candidateName: string;
+  candidateEmail: string;
+  attemptRef: string;
   sectionNumber: number;
   sectionName: string;
   saveStatus: SaveStatus;
@@ -38,7 +51,7 @@ export function ExamHeader({
   submit: ReactNode;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-exam-line bg-exam-surface">
+    <header className="z-30 shrink-0 border-b border-exam-line bg-exam-surface">
       <div className="flex w-full flex-col gap-2 px-4 py-2.5 md:flex-row md:items-center md:gap-6 md:px-6 md:py-2 lg:px-8">
         {/* Identity. `min-w-0` lets the long exam and candidate names truncate
             rather than push the timer out of the viewport. */}
@@ -60,13 +73,8 @@ export function ExamHeader({
               {examName}
             </h1>
             <p className="truncate text-[13px] text-exam-muted">
-              {/* `title` gives the full value when a long name is truncated. */}
-              <span title={candidateName}>{candidateName}</span>
-              <span aria-hidden="true"> · </span>
-              <span className="max-sm:hidden">
-                Section {sectionNumber} — {sectionName}
-              </span>
-              <span className="sm:hidden">Section {sectionNumber}</span>
+              Section {sectionNumber}
+              <span className="max-sm:hidden"> — {sectionName}</span>
             </p>
           </div>
         </div>
@@ -76,6 +84,33 @@ export function ExamHeader({
           {timer}
           {submit}
         </div>
+      </div>
+
+      {/* The identity strip. A test-centre screen states, continuously and
+          without being asked, who is sitting this paper and which sitting it
+          is — so a candidate can verify at a glance that they are in their own
+          examination, and can quote the reference if they need to report a
+          problem. It is informational only: nothing here is a control. */}
+      <div className="flex items-center gap-3 border-t border-exam-line bg-exam-subtle px-4 py-1.5 md:px-6 lg:px-8">
+        <span
+          aria-hidden="true"
+          className="exam-tabular flex size-7 shrink-0 items-center justify-center rounded-full bg-exam-primary text-[11px] font-semibold text-white"
+        >
+          {initialsOf(candidateName)}
+        </span>
+
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[13px] font-medium text-exam-ink" title={candidateName}>
+            {candidateName}
+          </span>
+          <span className="truncate text-[13px] text-exam-muted max-sm:hidden" title={candidateEmail}>
+            {candidateEmail}
+          </span>
+        </div>
+
+        <span className="ml-auto shrink-0 text-[11px] tracking-wide text-exam-muted uppercase">
+          Attempt <span className="exam-tabular font-semibold text-exam-ink-secondary">{attemptRef}</span>
+        </span>
       </div>
     </header>
   );

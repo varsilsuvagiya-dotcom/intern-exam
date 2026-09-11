@@ -238,10 +238,39 @@ export function ExamShell({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // `h-dvh`, not `h-screen`. `100vh` is the *large* viewport height, which on
+    // a phone excludes the browser's own chrome — so the shell was taller than
+    // the visible area and the navigation bar at its foot sat underneath the
+    // address bar, which is what put Previous/Next out of reach. `100dvh`
+    // tracks the viewport as that chrome shows and hides. No `h-screen`
+    // fallback beside it: both compile to `height`, so which one won would come
+    // down to Tailwind's output order rather than intent, and `dvh` is
+    // supported by every browser this examination is sat in.
+    <div className="relative flex h-dvh flex-col overflow-hidden">
+      {/* Faint tiled brand mark across the exam screen, for authenticity and
+          as a light deterrent against screenshots leaving the paper unmarked.
+          Purely decorative: `aria-hidden`, no pointer events, and behind
+          everything else. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 flex flex-wrap content-around justify-around overflow-hidden opacity-[0.045]"
+      >
+        {Array.from({ length: 60 }).map((_, index) => (
+          <span
+            key={index}
+            className="w-1/4 -rotate-[30deg] text-center text-sm font-semibold whitespace-nowrap text-exam-ink select-none"
+          >
+            CLOUDUS INFOTECH PVT LTD
+          </span>
+        ))}
+      </div>
+
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
       <ExamHeader
         examName={paper.examName}
         candidateName={paper.candidateName}
+        candidateEmail={paper.candidateEmail}
+        attemptRef={paper.attemptRef}
         sectionNumber={question.section}
         sectionName={question.sectionName}
         saveStatus={status}
@@ -271,12 +300,26 @@ export function ExamShell({
         </ExamBanner>
       ) : null}
 
-      <div className="flex w-full flex-1 gap-8 px-4 py-6 max-lg:flex-col md:px-6 lg:px-8">
+      {/* The one scroll region on the examination screen. The header and the
+          action bar are fixed frames around it, so Next and the timer never
+          move and only the paper itself travels under them. */}
+      <div className="flex w-full min-h-0 flex-1 gap-8 overflow-y-auto px-4 py-6 max-lg:flex-col md:px-6 lg:px-8">
         {/* The reading column is capped inside `main`, so on a very wide
             screen it is centred in the space left beside the palette rather
             than pinned to the far left with a large void between them. */}
-        <main ref={questionRef} className="flex min-w-0 flex-1 scroll-mt-[calc(var(--spacing-exam-header)+1rem)] flex-col items-center">
-          <div className="w-full max-w-exam-measure">
+        {/* `my-auto` on the child rather than `justify-center` on the column:
+            a short question sits optically centred in the reading area instead
+            of hugging the header with a screen of void beneath it, while a
+            long one still starts at the top and scrolls normally. Auto margins
+            collapse when the content outgrows the column; `justify-center`
+            would clip its top against the scroll container instead.
+
+            From `lg` only. Below it the shell stacks — the palette sits above
+            the question in this same column — and there is no spare height to
+            centre into, so the margin only added slack that pushed the question
+            around as the palette was opened and closed. */}
+        <main ref={questionRef} className="flex min-w-0 flex-1 flex-col items-center">
+          <div className="w-full max-w-exam-measure lg:my-auto">
           {resumeNotice && !expired ? (
             <div className="mb-6 flex items-start gap-3 rounded-exam-md border border-exam-info/30 bg-exam-info-bg p-3.5 text-sm text-exam-info">
               <RotateCcw aria-hidden="true" className="mt-0.5 size-[18px] shrink-0" />
@@ -308,35 +351,6 @@ export function ExamShell({
             lesson={lesson}
           />
 
-          {/* Sequential navigation. The palette is the jump mechanism; this
-              is the "next one please" mechanism, and the two are deliberately
-              the only ones. The answered count lives in the palette alone, so
-              there is one place in the product that states progress. */}
-          <nav
-            aria-label="Question sequence"
-            className="mt-8 flex max-w-exam-measure flex-wrap items-center justify-between gap-3 border-t border-exam-line pt-4"
-          >
-            <ExamButton
-              onClick={() => goTo(current - 1)}
-              disabled={current === 0}
-              icon={<ArrowLeft aria-hidden="true" className="size-4" />}
-            >
-              Previous
-            </ExamButton>
-
-            <span className="exam-tabular text-sm text-exam-muted">
-              Question {current + 1} of {total}
-            </span>
-
-            <ExamButton
-              onClick={() => goTo(current + 1)}
-              disabled={current === total - 1}
-              className="flex-row-reverse"
-              icon={<ArrowRight aria-hidden="true" className="size-4" />}
-            >
-              Next
-            </ExamButton>
-          </nav>
           </div>
         </main>
 
@@ -347,6 +361,49 @@ export function ExamShell({
           visited={visited}
           onJump={goTo}
         />
+      </div>
+
+      {/* Sequential navigation, pinned. The palette is the jump mechanism;
+          this is the "next one please" mechanism, and the two are deliberately
+          the only ones. It sits in a fixed bar rather than under the question
+          because a candidate should never have to scroll to reach Next — the
+          control is in the same place on every question, whatever its length.
+          The answered count lives in the palette alone, so there is one place
+          in the product that states progress. */}
+      {/* `shrink-0` beside the `flex-1` scroll region above is what pins this
+          to the foot of the shell: the paper scrolls, this does not move. The
+          extra bottom padding clears a phone's home indicator or gesture bar,
+          which otherwise overlaps the buttons on a device that has one. */}
+      <nav
+        aria-label="Question sequence"
+        className="z-20 flex shrink-0 items-center justify-between gap-3 border-t border-exam-line bg-exam-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6 lg:px-8"
+      >
+        <ExamButton
+          onClick={() => goTo(current - 1)}
+          disabled={current === 0}
+          icon={<ArrowLeft aria-hidden="true" className="size-4" />}
+          className="min-w-[120px]"
+        >
+          Previous
+        </ExamButton>
+
+        {/* The visible count lives with the question heading and in the
+            palette; repeating it here made three statements of one fact. It
+            stays for assistive tech, where the heading is not adjacent to
+            these controls. */}
+        <span className="sr-only" aria-live="polite">
+          Question {current + 1} of {total}
+        </span>
+
+        <ExamButton
+          onClick={() => goTo(current + 1)}
+          disabled={current === total - 1}
+          className="min-w-[120px] flex-row-reverse"
+          icon={<ArrowRight aria-hidden="true" className="size-4" />}
+        >
+          Next
+        </ExamButton>
+      </nav>
       </div>
     </div>
   );

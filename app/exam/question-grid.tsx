@@ -6,7 +6,7 @@ import type { CandidateQuestion } from "@/lib/exam/candidate-paper";
 
 import {
   QUESTION_CELL,
-  QUESTION_CURRENT_RING,
+  QUESTION_CURRENT,
   QUESTION_STATE,
   type QuestionState,
 } from "@/components/exam/question-state";
@@ -51,7 +51,7 @@ function sectionRuns(questions: CandidateQuestion[]): SectionRun[] {
 /// unchanged. The accessible name carries the question number *and* its state,
 /// because the visual encoding (fill, border weight, font weight) cannot be
 /// read aloud. `aria-current="true"` marks the current question in addition to
-/// the ring, so "where am I" survives both grayscale and a screen reader.
+/// its outline, so "where am I" survives both grayscale and a screen reader.
 function PaletteCell({
   number,
   state,
@@ -74,10 +74,12 @@ function PaletteCell({
         }`}
         className={[
           QUESTION_CELL,
-          "exam-tabular inline-flex items-center justify-center",
-          "transition-colors duration-[120ms] ease-out",
+          // `relative` so the current cell's `z-10` can lift it above its
+          // neighbours while it is scaled up.
+          "exam-tabular relative inline-flex cursor-pointer items-center justify-center",
+          "transition-[colors,transform] duration-[120ms] ease-out",
           QUESTION_STATE[state].cell,
-          isCurrent ? QUESTION_CURRENT_RING : "",
+          isCurrent ? QUESTION_CURRENT : "",
         ].join(" ")}
       >
         {number}
@@ -95,6 +97,11 @@ function PaletteCell({
 /// The wording is the same wording the cells announce, so a candidate who
 /// hears "Question 12, answered" and then reads the legend sees one vocabulary
 /// rather than two.
+///
+/// The three status colours only. The current question is not listed: it is
+/// shown by the cell growing rather than by a colour, which needs no key —
+/// and a fixed-size swatch could not have depicted it anyway. Assistive tech
+/// still hears it, from `aria-current` on the cell itself.
 function Legend() {
   return (
     <dl className="mt-4 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-2 text-[13px] text-exam-muted">
@@ -109,10 +116,10 @@ function Legend() {
       <dt className="flex">
         <span
           aria-hidden="true"
-          className={`size-4 rounded-exam-sm ${QUESTION_STATE.seen.swatch}`}
+          className={`size-4 rounded-exam-sm ${QUESTION_STATE.skipped.swatch}`}
         />
       </dt>
-      <dd>Seen, not answered</dd>
+      <dd>Not answered</dd>
 
       <dt className="flex">
         <span
@@ -121,14 +128,6 @@ function Legend() {
         />
       </dt>
       <dd>Not seen</dd>
-
-      <dt className="flex">
-        <span
-          aria-hidden="true"
-          className={`size-4 rounded-exam-sm border-2 border-exam-line-strong bg-exam-surface ${QUESTION_CURRENT_RING}`}
-        />
-      </dt>
-      <dd>Current question</dd>
     </dl>
   );
 }
@@ -217,7 +216,7 @@ export function QuestionGrid({
 }) {
   const stateOf = (question: CandidateQuestion): QuestionState => {
     if (answers[question.id] !== undefined) return "answered";
-    return visited[question.id] ? "seen" : "unseen";
+    return visited[question.id] ? "skipped" : "unseen";
   };
 
   const total = questions.length;
@@ -229,11 +228,10 @@ export function QuestionGrid({
     <div>
       <Progress answered={answered} total={total} />
 
-      {/* The one scroll region in the palette, and only when the paper is
-          taller than the space beside the question. `lg:` because below that
-          the palette is stacked in normal page flow and scrolling it
-          separately would trap content inside a short box. */}
-      <div className="mt-4 lg:max-h-[calc(100vh-var(--spacing-exam-header)-19rem)] lg:overflow-y-auto lg:pr-1">
+      {/* No scroll region of its own: the shell gives the whole content area
+          one scrollbar, and a second one nested inside the palette would put
+          two side by side on the same edge. */}
+      <div className="mt-4">
         {runs.map((run, runIndex) => (
           <section
             key={`${run.section}-${runIndex}`}
@@ -245,10 +243,16 @@ export function QuestionGrid({
               <span className="truncate normal-case tracking-normal">{run.sectionName}</span>
             </h3>
 
-            {/* `auto-fill` rather than a fixed column count: the palette is
-                272px beside the question and full width when stacked, and the
-                cells stay 44px in both cases instead of being squeezed. */}
-            <ol className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5">
+            {/* `auto-fill` at the cell's own size in both cases: 44px touch
+                targets below `lg`, 34px pointer targets in the sidebar, where
+                a full-length paper has to fit without scrolling. The tracks
+                are sized to the cell rather than `1fr` so the cells stay
+                square instead of stretching to fill the column.
+
+                The gap clears the current question, which scales up by a
+                quarter and so extends about 4px beyond its track on each
+                side. */}
+            <ol className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-2 lg:grid-cols-[repeat(auto-fill,34px)] lg:gap-2.5">
               {run.items.map(({ question, index }) => (
                 <PaletteCell
                   key={question.id}
@@ -292,7 +296,11 @@ export function QuestionGrid({
         open={isWide || undefined}
         className={[
           "group rounded-exam-lg border border-exam-line bg-exam-surface",
-          "lg:sticky lg:top-[calc(var(--spacing-exam-header)+1rem)] lg:rounded-none lg:border-0 lg:bg-transparent",
+          // No scrolling of its own from `lg` up: the cells size to the
+          // column, so a full-length paper fits in the panel and every
+          // question stays one click away. `px-1` is room for the current
+          // question's focus ring, which would otherwise clip at the edge.
+          "lg:sticky lg:top-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-1",
         ].join(" ")}
       >
         <summary

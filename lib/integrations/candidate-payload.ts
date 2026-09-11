@@ -31,6 +31,74 @@ export function normalizeMobile(raw: string): string | null {
   return /^[6-9]\d{9}$/.test(withoutPrefix) ? withoutPrefix : null;
 }
 
+/// A candidate entered by an administrator rather than synchronized.
+///
+/// The same name, email and mobile rules as the Google Form sync — deliberately
+/// the same function, so a number the sync would reject cannot be let in by
+/// hand. There is no `googleFormResponseId`: the column is nullable precisely
+/// because a candidate can arrive without a form response, and inventing an id
+/// here would make a manual entry indistinguishable from a synchronized one and
+/// silently occupy a response id the form may later send.
+///
+/// Errors are keyed by field so the form can put each one beside its input;
+/// the sync's flat string list is right for an API response and wrong for a
+/// form.
+export type ManualCandidateInput = {
+  name: string;
+  email: string;
+  mobile: string;
+};
+
+export type CandidateFieldError = {
+  field: "name" | "email" | "mobile" | "form";
+  message: string;
+};
+
+export type ManualValidationResult =
+  | { ok: true; value: ManualCandidateInput }
+  | { ok: false; errors: CandidateFieldError[] };
+
+export function validateManualCandidate(input: {
+  name: string;
+  email: string;
+  mobile: string;
+}): ManualValidationResult {
+  const errors: CandidateFieldError[] = [];
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const mobileRaw = input.mobile.trim();
+
+  if (!name) {
+    errors.push({ field: "name", message: "Enter the candidate's full name." });
+  } else if (name.length > MAX_NAME) {
+    errors.push({ field: "name", message: `Use at most ${MAX_NAME} characters.` });
+  }
+
+  if (!email) {
+    errors.push({ field: "email", message: "Enter an email address." });
+  } else if (email.length > MAX_EMAIL || !EMAIL_PATTERN.test(email)) {
+    errors.push({ field: "email", message: "Enter a valid email address." });
+  }
+
+  const mobile = mobileRaw ? normalizeMobile(mobileRaw) : null;
+
+  if (!mobileRaw) {
+    errors.push({ field: "mobile", message: "Enter a mobile number." });
+  } else if (!mobile) {
+    errors.push({
+      field: "mobile",
+      message: "Enter a valid 10-digit Indian mobile number.",
+    });
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  return { ok: true, value: { name, email, mobile: mobile as string } };
+}
+
 export function validateCandidatePayload(body: unknown): ValidationResult {
   const errors: string[] = [];
 

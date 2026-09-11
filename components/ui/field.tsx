@@ -1,5 +1,6 @@
 import type {
   InputHTMLAttributes,
+  Ref,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
@@ -18,7 +19,13 @@ export function Input({
   invalid,
   className = "",
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  invalid?: boolean;
+  /// React 19 passes `ref` as an ordinary prop, so it needs declaring rather
+  /// than forwarding. A form that stays open after submitting re-focuses its
+  /// first field.
+  ref?: Ref<HTMLInputElement>;
+}) {
   return (
     <input
       {...props}

@@ -253,7 +253,7 @@ export default async function AttemptsPage({
                       ) : (
                         <Link
                           href={`/admin/attempts/${encodeURIComponent(attempt.id)}?back=${encodeURIComponent(backQuery)}`}
-                          className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
+                          className={buttonClass("primary", "sm")}
                         >
                           View result
                         </Link>

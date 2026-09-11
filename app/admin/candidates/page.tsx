@@ -10,6 +10,8 @@ import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { PAGE_SIZES, listCandidates, parseCandidateFilters } from "@/lib/admin/query-candidates";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
+import { CandidateEditor, EditButton } from "./candidate-editor";
+
 export const metadata: Metadata = { title: "Candidates" };
 
 /// Filters live in the URL, so this must not be cached as a static page.
@@ -46,7 +48,10 @@ export default async function CandidatesPage({
     <PageBody>
       <PageHeader
         title="Candidates"
-        description="Registrations synchronized from the Google Form. This page is read-only."
+        // No longer read-only: candidates can be added and corrected here.
+        // Nothing on this page deletes one, and a correction leaves the form
+        // response id alone, so a re-sync still updates the same row.
+        description="Registrations synchronized from the Google Form, plus any added manually."
         actions={
           <Link
             href="/admin/attempts"
@@ -58,6 +63,11 @@ export default async function CandidatesPage({
         }
       />
 
+      {/* Wraps the filters and the table so the "Add candidate" button above
+          them and the "Edit" button on each row drive one shared panel. The
+          table stays server-rendered: it is passed through as children, and
+          only the per-row Edit control is a client component. */}
+      <CandidateEditor>
       <FilterBar resetHref="/admin/candidates">
         <SearchField
           id="candidates-search"
@@ -85,7 +95,7 @@ export default async function CandidatesPage({
             body={
               filters.search
                 ? "Try a different name, email or mobile number."
-                : "Candidates appear here once the Google Form sync runs."
+                : "Candidates appear here once the Google Form sync runs, or you can add one above."
             }
             action={
               filters.search ? (
@@ -100,7 +110,7 @@ export default async function CandidatesPage({
           />
         ) : (
           <>
-            <TableContainer label="Candidates table" minWidth={920}>
+            <TableContainer label="Candidates table" minWidth={1020}>
               <thead>
                 <tr>
                   <Th>Candidate</Th>
@@ -108,7 +118,7 @@ export default async function CandidatesPage({
                   <Th>Registered</Th>
                   <Th>Updated</Th>
                   <Th align="right">Attempts</Th>
-                  <Th align="right">View</Th>
+                  <Th align="right">Actions</Th>
                 </tr>
               </thead>
               <tbody>
@@ -149,17 +159,31 @@ export default async function CandidatesPage({
                         {candidate.attemptCount}
                       </span>
                     </Td>
+                    {/* Both row actions in one cell. Edit is secondary and
+                        sits first, so the primary "View attempts" stays the
+                        rightmost thing on the row as it was before. */}
                     <Td align="right">
-                      {/* `aria-label` rather than an `sr-only` span: an
-                          absolutely-positioned span inside the scroll
-                          container escapes it and pans the whole page. */}
-                      <Link
-                        href={`/admin/attempts?candidate=${encodeURIComponent(candidate.id)}`}
-                        aria-label={`View attempts for ${candidate.name}`}
-                        className="rounded-sm text-sm font-medium whitespace-nowrap text-primary hover:underline"
-                      >
-                        View attempts
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <EditButton
+                          candidate={{
+                            id: candidate.id,
+                            name: candidate.name,
+                            email: candidate.email,
+                            mobile: candidate.mobile,
+                          }}
+                        />
+
+                        {/* `aria-label` rather than an `sr-only` span: an
+                            absolutely-positioned span inside the scroll
+                            container escapes it and pans the whole page. */}
+                        <Link
+                          href={`/admin/attempts?candidate=${encodeURIComponent(candidate.id)}`}
+                          aria-label={`View attempts for ${candidate.name}`}
+                          className={buttonClass("primary", "sm")}
+                        >
+                          View attempts
+                        </Link>
+                      </div>
                     </Td>
                   </Tr>
                 ))}
@@ -175,6 +199,7 @@ export default async function CandidatesPage({
           </>
         )}
       </div>
+      </CandidateEditor>
     </PageBody>
   );
 }

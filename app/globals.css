@@ -107,11 +107,13 @@ body {
   /* Layout constants the exam shell and palette build on. The palette width
      is a token because the question column is measured against it at every
      breakpoint. */
-  --spacing-exam-palette: 272px;
-  --spacing-exam-header: 60px;
-  --spacing-exam-actionbar: 68px;
-  /* Reading measure for question and lesson text. */
-  --spacing-exam-measure: 68ch;
+  --spacing-exam-palette: 312px;
+  --spacing-exam-header: 97px;
+  /* Reading measure for question and lesson text. 76ch rather than 90ch: at
+     17px the longer measure runs past the width the eye can sweep back across
+     reliably, and it left the answer options stretched thin across the column
+     with the page reading half-empty. */
+  --spacing-exam-measure: 76ch;
 }
 
 /* ---------------------------------------------------------------------------

@@ -97,7 +97,7 @@ export function PageBody({
   // column open and the page body would scroll horizontally. Only the table's
   // own container may scroll.
   return (
-    <main className={`w-full min-w-0 px-4 py-8 lg:px-6 lg:py-10 ${max}`}>{children}</main>
+    <main className={`w-full min-w-0 px-4 py-4 lg:px-6 lg:py-4 ${max}`}>{children}</main>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 import { Loader2 } from "lucide-react";
 
@@ -38,7 +38,7 @@ export const buttonClass = (
 ): string =>
   [
     "inline-flex items-center justify-center rounded-md font-medium whitespace-nowrap",
-    "transition-colors duration-[120ms] ease-out disabled:cursor-not-allowed",
+    "transition-colors duration-[120ms] ease-out cursor-pointer disabled:cursor-not-allowed",
     VARIANT[variant],
     SIZE[size],
     className,
@@ -52,6 +52,9 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
   loadingLabel?: string;
   icon?: ReactNode;
+  /// React 19 passes `ref` as an ordinary prop, so it needs declaring rather
+  /// than forwarding. A disclosure returns focus to its trigger on close.
+  ref?: Ref<HTMLButtonElement>;
 };
 
 export function Button({
@@ -106,7 +109,7 @@ export function IconButton({
       title={label}
       className={[
         "inline-flex items-center justify-center rounded-md",
-        "transition-colors duration-[120ms] ease-out disabled:cursor-not-allowed",
+        "transition-colors duration-[120ms] ease-out cursor-pointer disabled:cursor-not-allowed",
         VARIANT[variant],
         box,
         "max-md:size-11",

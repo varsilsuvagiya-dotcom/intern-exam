@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { Clock } from "lucide-react";
+
 import type { TimingState } from "@/lib/exam/exam-timer";
 
 import { fetchTiming } from "./actions";
@@ -11,9 +13,9 @@ import { fetchTiming } from "./actions";
 const RESYNC_MS = 30_000;
 
 /// The one threshold this component has ever had. It is a presentation
-/// threshold, not a business rule — nothing server-side changes at five
+/// threshold, not a business rule — nothing server-side changes at ten
 /// minutes — so it is styled here rather than moved.
-const LOW_SECONDS = 300;
+const LOW_SECONDS = 600;
 
 /// Hours are shown only once the exam is long enough to need them. A 75-minute
 /// paper reads "01:14:59" at the start and "09:59" near the end, rather than
@@ -120,34 +122,45 @@ export function ExamTimerDisplay({
       : "";
 
   return (
-    <div className="flex flex-col items-end leading-none">
-      <span
-        id="exam-timer-label"
-        className="text-[11px] font-medium uppercase tracking-wide text-exam-muted"
-      >
-        Time remaining
-      </span>
+    // A bordered panel rather than loose text in the header: the clock is the
+    // one instrument on an examination screen, and it should read as a
+    // distinct thing a candidate can glance at, not as a caption that happens
+    // to sit beside the submit button. The whole panel turns red when time is
+    // short, so the state is legible peripherally.
+    <div
+      className={[
+        "flex items-center gap-2.5 rounded-exam-md border px-3 py-1.5",
+        low || expired
+          ? "border-exam-danger/40 bg-exam-danger-bg"
+          : "border-exam-line bg-exam-subtle",
+      ].join(" ")}
+    >
+      <Clock
+        aria-hidden="true"
+        className={`size-[18px] shrink-0 ${low || expired ? "text-exam-danger" : "text-exam-muted"}`}
+      />
 
-      {/* `role="timer"` names this for assistive tech without making it a live
-          region; the announcement below is what actually speaks. */}
-      <span
-        role="timer"
-        aria-labelledby="exam-timer-label"
-        className={[
-          "exam-tabular mt-1 text-[26px] font-semibold tracking-tight tabular-nums",
-          expired ? "text-exam-danger" : low ? "text-exam-danger" : "text-exam-ink",
-        ].join(" ")}
-      >
-        {format(remaining)}
-      </span>
-
-      {/* The low state is never carried by colour alone: the red is paired
-          with a word. */}
-      {low || expired ? (
-        <span className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-exam-danger">
-          {expired ? "Time is up" : "Ending soon"}
+      <div className="flex flex-col leading-none">
+        <span
+          id="exam-timer-label"
+          className="text-[10px] font-medium tracking-wide text-exam-muted uppercase"
+        >
+          {expired ? "Time is up" : low ? "Ending soon" : "Time remaining"}
         </span>
-      ) : null}
+
+        {/* `role="timer"` names this for assistive tech without making it a
+            live region; the announcement below is what actually speaks. */}
+        <span
+          role="timer"
+          aria-labelledby="exam-timer-label"
+          className={[
+            "exam-tabular mt-1 text-[22px] font-semibold tracking-tight tabular-nums",
+            low || expired ? "text-exam-danger" : "text-exam-ink",
+          ].join(" ")}
+        >
+          {format(remaining)}
+        </span>
+      </div>
 
       <span aria-live="polite" className="sr-only">
         {announcement}

@@ -97,7 +97,7 @@ export function QuestionDisplay({
         <fieldset className="mt-6 min-w-0">
           <legend className="text-sm font-medium text-exam-ink">Choose one answer</legend>
 
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 flex flex-col gap-2.5">
             {question.options.map((option) => {
               const selected = answer === option.key;
 
@@ -105,13 +105,24 @@ export function QuestionDisplay({
                 <label
                   key={option.key}
                   className={[
-                    "group flex min-h-11 cursor-pointer items-start gap-3 rounded-exam-md border p-3",
+                    "group flex min-h-12 cursor-pointer items-start gap-3 rounded-exam-md border px-3.5 py-3",
                     "transition-colors duration-[120ms] ease-out",
-                    // Selection is carried by the border weight and the letter
-                    // badge as well as the tint, so it never depends on colour.
+                    // Selection is carried by the border weight, the ring and
+                    // the letter badge as well as the tint, so it never depends
+                    // on colour. The ring doubles the apparent border without
+                    // shifting the row by a pixel, which a 2px border would.
+                    //
+                    // The focus ring itself stays on the radio, where the one
+                    // global focus treatment already draws it; the unselected
+                    // row only tints alongside it, so a keyboard user sees the
+                    // whole row they are on. The tint is not applied to a
+                    // selected row, where it would override the selected fill.
                     selected
-                      ? "border-exam-primary bg-exam-primary-subtle"
-                      : "border-exam-line-strong bg-exam-surface hover:border-exam-muted hover:bg-exam-subtle",
+                      ? "border-exam-primary bg-exam-primary-subtle ring-1 ring-exam-primary"
+                      : [
+                          "border-exam-line-strong bg-exam-surface",
+                          "hover:bg-exam-subtle has-[:focus-visible]:bg-exam-subtle",
+                        ].join(" "),
                     disabled ? "cursor-not-allowed opacity-60" : "",
                   ].join(" ")}
                 >
@@ -122,7 +133,9 @@ export function QuestionDisplay({
                     checked={selected}
                     onChange={() => onAnswer(option.key)}
                     disabled={disabled}
-                    className="mt-0.5 size-4 shrink-0 accent-exam-primary"
+                    // The row above carries the focus ring, so the input's own
+                    // one is suppressed rather than drawn inside it.
+                    className="mt-[3px] size-[18px] shrink-0 accent-exam-primary focus-visible:outline-none"
                   />
 
                   {/* The letter is a fixed-width badge so multi-line option
@@ -130,7 +143,7 @@ export function QuestionDisplay({
                       around the label. */}
                   <span
                     className={[
-                      "flex size-5 shrink-0 items-center justify-center rounded-exam-sm text-xs font-semibold",
+                      "mt-px flex size-[22px] shrink-0 items-center justify-center rounded-exam-sm text-[13px] font-semibold",
                       selected
                         ? "bg-exam-primary text-white"
                         : "bg-exam-inset text-exam-ink-secondary",
@@ -147,7 +160,7 @@ export function QuestionDisplay({
 
                   {/* `min-w-0` lets a long unbroken option wrap instead of
                       pushing the row wider than the column. */}
-                  <span className="min-w-0 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-exam-ink">
+                  <span className="min-w-0 whitespace-pre-wrap break-words text-[15.5px] leading-[1.55] text-exam-ink">
                     {option.text}
                   </span>
                 </label>
