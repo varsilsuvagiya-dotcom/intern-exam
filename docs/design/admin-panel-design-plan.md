@@ -78,7 +78,7 @@ Actual admin routes found in `app/`:
 **Question Bank**
 
 10. *Eleven columns of near-identical weight.* ID, Sec, Topic, Question, Lesson, Difficulty, Marks, Scored, Status, Active, and the action link all render at `text-sm` in the same color. The eye has no entry point.
-11. *Status is doubled and unclear.* `status` (draft/review/ready) and `isActive` are separate columns rendering plain lowercase text; only inactive rows get a dim treatment. Two different state axes look like one.
+11. *Status is doubled and unclear.* `status` (draft/review/ready) and `isActive` are separate columns rendering plain lowercase text; only inactive rows get a dim treatment. Two different state axes look like one. **(Resolved 2026-09-11 by removing the `status` axis entirely — see "Question active flag" below.)**
 12. *Question text truncates with `max-w-sm truncate`* and exposes the full text only via the native `title` tooltip — slow, unstyled, and invisible on keyboard focus.
 13. *The filter row is seven controls in a raw grid* with no visual container separating it from the results.
 
@@ -246,11 +246,11 @@ Status palette. Each has a `fg` (text/icon, AA on its own `bg`) and a `bg` (badg
 
 | Token | fg | bg | Meaning in CloudUS |
 |---|---|---|---|
-| `success` | `#166534` | `#E8F5EC` | Correct answer, Ready, import succeeded, Exam Open |
-| `warning` | `#8A5300` | `#FDF3E2` | Unanswered, Scoring Pending, import warnings, destructive confirm |
+| `success` | `#166534` | `#E8F5EC` | Correct answer, Active, import succeeded, Exam Open |
+| `warning` | `#8A5300` | `#FDF3E2` | Unanswered, Scoring Pending, Inactive, import warnings, destructive confirm |
 | `danger` | `#A81E1E` | `#FDECEC` | Wrong answer, validation error, failed action |
 | `info` | `#1A4FA0` | `#EDF3FC` | In Progress, informational notes |
-| `neutral` | `#4A5261` | `#F1F3F6` | Unscored (Section 8), Inactive, Draft, Closed |
+| `neutral` | `#4A5261` | `#F1F3F6` | Unscored (Section 8), Closed |
 
 Notes:
 
@@ -541,17 +541,19 @@ Every status in CloudUS, using only values that actually exist in the codebase.
 
 **Badge style:** `radius.sm`, `space.1` / `space.3` padding, `badge` token, status `bg` fill + `fg` text. No border. **Sentence case** ("In progress", not "IN PROGRESS" or "in_progress").
 
-### Question status (`QuestionStatus` enum)
+### Question active flag (`isActive`)
+
+The `QuestionStatus` enum (draft/review/ready) was removed (2026-09-11). A
+question now has exactly one state: `isActive`. There is no separate
+authoring-workflow axis to render alongside it.
 
 | Value | Badge | Label |
 |---|---|---|
-| `ready` | `success` | Ready |
-| `review` | `warning` | In review |
-| `draft` | `neutral` | Draft |
+| `true` | `success` | Active |
+| `false` | `warning` | Inactive |
 
-### Question active flag (`isActive`)
-
-A **separate axis** — fixing audit problem 11. Do not merge it into the status badge. Render inactive rows with a small `neutral` "Inactive" badge in a dedicated column and dim the row's identity text; active rows show nothing (absence is the norm).
+Both states render as a filled badge — audit problem 11 (two state axes
+looking like one) is moot now that there is only one axis.
 
 ### Question difficulty (`Difficulty` enum)
 
@@ -931,7 +933,7 @@ components/
 | Component | Purpose | Why reusable |
 |---|---|---|
 | `AttemptStatusBadge` | Maps `AttemptStatus` → badge + label | Attempts table, Result page |
-| `QuestionStatusBadge` | Maps `QuestionStatus` + `isActive` | Questions table, Editor |
+| `QuestionActiveBadge` | Maps `isActive` → badge + label | Questions table, Editor |
 | `ScoreCell` | Renders the three-state score per §15 | Attempts table (and Result summary) |
 | `SectionScoreTable` | 8 sections + total, achieved/max | Result page (and Overview, if the blueprint summary is shown) |
 | `FilterBar` | GET form wrapper with consistent layout + Apply/Reset | Questions, Candidates, Attempts |
@@ -978,8 +980,8 @@ The requirements have **no dashboard screen** (Screens A–D are Question bank, 
 
 1. **Exam status strip.** The single most important ambient fact. A card showing exam **Open/Closed** badge, exam name, duration, and difficulty mix, with a "Manage settings" link. All values already available from `getExamSettings()`.
 
-2. **Readiness summary.** Whether the bank can actually produce a paper: total active+ready questions, and a per-section count against the blueprint requirement (e.g. "Section 4 — 8 needed, 26 available"). This is *operationally* essential (paper generation fails without it) and is not "analytics".
-   → **Requires a new backend query** (a grouped count of ready/active questions by section). **Future / needs implementation** — document, do not build now.
+2. **Readiness summary.** Whether the bank can actually produce a paper: total active questions, and a per-section count against the blueprint requirement (e.g. "Section 4 — 8 needed, 26 available"). This is *operationally* essential (paper generation fails without it) and is not "analytics". Already implemented for the Question Bank page (`getBankReadiness()`); not yet surfaced on Overview.
+   → **Requires reusing the existing `getBankReadiness()` query** (a grouped count of active questions by section — `QuestionStatus` no longer factors in). **Future / needs implementation on this page** — document, do not build now.
 
 3. **Recent attempts.** The five most recent attempts, reusing the Attempts row presentation (candidate, status, score state), with "View all attempts". `listAttempts` already supports this via existing filters/sort.
 
@@ -1001,7 +1003,7 @@ The requirements have **no dashboard screen** (Screens A–D are Question bank, 
 
 **Filter bar:** a bordered `bg.surface` container (fixing audit problem 13) holding Search, Section, Difficulty, Status, Active, Scored, Per-page, then Apply + Reset. Search is widest; selects are uniform width. All existing parameters preserved exactly.
 
-**Table columns** (reduced from eleven to nine, with clear hierarchy):
+**Table columns** (reduced from eleven to eight, with clear hierarchy):
 
 | Column | Treatment |
 |---|---|
@@ -1011,9 +1013,11 @@ The requirements have **no dashboard screen** (Screens A–D are Question bank, 
 | Topic | `secondary`, `text.muted` |
 | Difficulty | Neutral outlined chip |
 | Marks | Right-aligned, tabular |
-| Status | `QuestionStatusBadge` |
-| Active | "Inactive" `neutral` badge, or empty |
+| Active | `QuestionActiveBadge` — "Active" (`success`) or "Inactive" (`warning`) |
 | — | "Open" link, right-aligned |
+
+There is no separate "Status" column — the `QuestionStatus` enum was removed
+(2026-09-11). `isActive` is the only state a question carries.
 
 **Lesson** and **Scored** move off the default table: Lesson group is only meaningful for Section 7 (show it as a small annotation under the ID when present), and Scored is fully determined by section (8 = unscored), so a dedicated column repeats information. *This removes two columns without losing information — the editor shows both.*
 
@@ -1499,7 +1503,7 @@ None of this is implemented. Each item is optional and must be approved separate
 
 | Item | Needed for | Status |
 |---|---|---|
-| Grouped count of ready+active questions by section | Dashboard readiness widget | **Future / not currently supported** |
+| Grouped count of active questions by section (`getBankReadiness()` already exists — needs reuse on Overview) | Dashboard readiness widget | **Future / not currently supported on Overview** |
 | Grouped count of candidates sharing a mobile | Candidates duplicate-mobile badge (requirements' stated weak point) | **Future / not currently supported** |
 | Time taken (`submittedAt − startedAt`, or populating the unused `durationSeconds` column) | Attempts "Time taken" column named in the requirements | **Future / not currently supported** |
 | `app/admin/layout.tsx` | The admin shell + `ToastProvider` mount | Required by step 1 of the implementation order |
