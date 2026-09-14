@@ -5,7 +5,7 @@ import {
   QUESTIONS_PER_LESSON_GROUP,
   isSectionCode,
 } from "@/lib/exam-settings/exam-blueprint";
-import { Difficulty, OptionKey, QuestionStatus } from "@/lib/generated/prisma/enums";
+import { Difficulty, OptionKey } from "@/lib/generated/prisma/enums";
 
 import { validateMarks } from "./question-rules";
 
@@ -13,8 +13,8 @@ import { validateMarks } from "./question-rules";
 ///
 /// Activation is what makes a question drawable, so this is the last gate
 /// before a question can reach a candidate. Paper generation draws on
-/// `status: ready AND isActive: true`; this function decides whether a question
-/// is fit to be given that second flag.
+/// `isActive: true` alone; this function decides whether a question is fit to
+/// be given that flag.
 ///
 /// The rules here are deliberately only those the candidate exam already
 /// depends on. Nothing about business intent — whether a question is *good*, or
@@ -31,7 +31,6 @@ export type NotReadyReason =
   | "INVALID_MARKS"
   | "INVALID_DIFFICULTY"
   | "INVALID_SECTION"
-  | "INVALID_STATUS"
   | "MISSING_LESSON_TEXT"
   | "INVALID_LESSON_GROUP";
 
@@ -42,7 +41,6 @@ export const NOT_READY_MESSAGE: Record<NotReadyReason, string> = {
   INVALID_MARKS: "Marks are not a valid storable value",
   INVALID_DIFFICULTY: "Difficulty is not easy, medium or hard",
   INVALID_SECTION: "Section is not one of the seven active section codes",
-  INVALID_STATUS: "Status is not a recognised authoring status",
   MISSING_LESSON_TEXT: "Learn-and-Apply questions must carry lesson text",
   INVALID_LESSON_GROUP: "Learn-and-Apply questions must belong to a lesson group",
 };
@@ -63,7 +61,6 @@ export type ActivationCandidate = {
   lessonText: string | null;
   lessonGroup: string | null;
   marks: string;
-  status: string;
 };
 
 export type ReadinessVerdict =
@@ -72,7 +69,6 @@ export type ReadinessVerdict =
 
 const DIFFICULTIES = new Set<string>(Object.values(Difficulty));
 const OPTIONS = new Set<string>(Object.values(OptionKey));
-const STATUSES = new Set<string>(Object.values(QuestionStatus));
 
 function blank(value: string | null): boolean {
   return (value ?? "").trim() === "";
@@ -109,10 +105,6 @@ export function checkActivationReadiness(question: ActivationCandidate): Readine
 
   if (!DIFFICULTIES.has(question.difficulty)) {
     reasons.push("INVALID_DIFFICULTY");
-  }
-
-  if (!STATUSES.has(question.status)) {
-    reasons.push("INVALID_STATUS");
   }
 
   if (validateMarks(question.marks) !== null) {

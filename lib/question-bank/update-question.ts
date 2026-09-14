@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import type { Difficulty, OptionKey, QuestionStatus } from "@/lib/generated/prisma/enums";
+import type { Difficulty, OptionKey } from "@/lib/generated/prisma/enums";
 
 import { VALID_SECTIONS, isSectionCode } from "@/lib/exam-settings/exam-blueprint";
 
@@ -9,7 +9,6 @@ import {
   DIFFICULTY_VALUES,
   MAX_TOPIC_LENGTH,
   OPTION_VALUES,
-  STATUS_VALUES,
   describeAccepted,
 } from "./csv-contract";
 import { validateMarks, validateQuestionRules, type FieldError } from "./question-rules";
@@ -33,7 +32,6 @@ export type QuestionEdit = {
   marks: string;
   aiVerified: boolean;
   trainerVerified: boolean;
-  status: QuestionStatus;
   isActive: boolean;
 };
 
@@ -82,11 +80,6 @@ export function validateQuestionEdit(form: FormData): EditValidation {
     errors.push({ field: "correct", message: `Correct answer must be one of ${describeAccepted(OPTION_VALUES)}` });
   }
 
-  const status = STATUS_VALUES[text("status").toLowerCase()];
-  if (!status) {
-    errors.push({ field: "status", message: `Status must be one of ${describeAccepted(STATUS_VALUES)}` });
-  }
-
   const marks = text("marks");
   const marksError = marks ? validateMarks(marks) : "Marks is required";
   if (marksError) {
@@ -126,7 +119,6 @@ export function validateQuestionEdit(form: FormData): EditValidation {
       marks,
       aiVerified: flag("aiVerified"),
       trainerVerified: flag("trainerVerified"),
-      status: status as QuestionStatus,
       isActive: flag("isActive"),
     },
   };

@@ -33,7 +33,6 @@ export type EditableQuestion = {
   marks: string;
   aiVerified: boolean;
   trainerVerified: boolean;
-  status: string;
   isActive: boolean;
 };
 
@@ -182,7 +181,6 @@ export function QuestionEditor({
   // ThemeSelect is controlled, unlike the native `<select>` these replace, so
   // each needs a value to control even where nothing else reacts to it.
   const [difficulty, setDifficulty] = useState(question.difficulty);
-  const [status, setStatus] = useState(question.status);
   // Preserved as authored; every active section is scored.
   const scored = question.scored;
   const [correct, setCorrect] = useState(question.correct);
@@ -281,7 +279,7 @@ export function QuestionEditor({
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field id={fieldId("section")} label="Section" required error={errorFor("section")}>
               {({ id, describedBy, invalid }) => (
                 <ThemeSelect
@@ -317,33 +315,6 @@ export function QuestionEditor({
                     ["easy", "Easy"],
                     ["medium", "Medium"],
                     ["hard", "Hard"],
-                  ]}
-                />
-              )}
-            </Field>
-
-            {/* Status is the authoring workflow. Whether the question may be
-                drawn into a paper is `isActive`, below — a separate concept,
-                deliberately not merged into this control. */}
-            <Field
-              id={fieldId("status")}
-              label="Status"
-              required
-              error={errorFor("status")}
-              hint="Authoring workflow only."
-            >
-              {({ id, describedBy, invalid }) => (
-                <ThemeSelect
-                  id={id}
-                  name="status"
-                  value={status}
-                  onChange={setStatus}
-                  aria-describedby={describedBy}
-                  invalid={invalid}
-                  options={[
-                    ["draft", "Draft"],
-                    ["review", "Review"],
-                    ["ready", "Ready"],
                   ]}
                 />
               )}

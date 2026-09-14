@@ -31,7 +31,6 @@ const READINESS_SELECT = {
   lessonText: true,
   lessonGroup: true,
   marks: true,
-  status: true,
   isActive: true,
 } as const;
 
@@ -39,14 +38,11 @@ export type BankTotals = {
   total: number;
   active: number;
   inactive: number;
-  draft: number;
-  review: number;
-  ready: number;
   /// Inactive questions that would pass validation if activated now.
   readyToActivate: number;
   /// Inactive questions that would be refused.
   notReady: number;
-  /// Questions paper generation can actually draw: ready AND active.
+  /// Questions paper generation can actually draw: active.
   drawable: number;
 };
 
@@ -59,7 +55,6 @@ export type SectionReadiness = {
   total: number;
   active: number;
   inactive: number;
-  draft: number;
   drawable: number;
   readyToActivate: number;
   notReady: number;
@@ -93,7 +88,6 @@ type Row = {
   lessonText: string | null;
   lessonGroup: string | null;
   marks: { toString(): string };
-  status: string;
   isActive: boolean;
 };
 
@@ -112,9 +106,6 @@ export async function getBankReadiness(): Promise<BankReadiness> {
     total: rows.length,
     active: 0,
     inactive: 0,
-    draft: 0,
-    review: 0,
-    ready: 0,
     readyToActivate: 0,
     notReady: 0,
     drawable: 0,
@@ -136,11 +127,13 @@ export async function getBankReadiness(): Promise<BankReadiness> {
     bySection.set(row.section, existing);
   }
 
-  const tally = (row: Row, into: { active: number; inactive: number; draft: number; drawable: number; readyToActivate: number; notReady: number }) => {
-    if (row.isActive) into.active += 1;
-    else into.inactive += 1;
-    if (row.status === "draft") into.draft += 1;
-    if (row.status === "ready" && row.isActive) into.drawable += 1;
+  const tally = (row: Row, into: { active: number; inactive: number; drawable: number; readyToActivate: number; notReady: number }) => {
+    if (row.isActive) {
+      into.active += 1;
+      into.drawable += 1;
+    } else {
+      into.inactive += 1;
+    }
 
     if (!row.isActive) {
       const verdict = checkActivationReadiness(toCandidate(row));
@@ -150,14 +143,12 @@ export async function getBankReadiness(): Promise<BankReadiness> {
   };
 
   for (const row of rows) {
-    if (row.status === "review") totals.review += 1;
-    if (row.status === "ready") totals.ready += 1;
     tally(row, totals);
   }
 
   const sections: SectionReadiness[] = SECTION_BLUEPRINT.map((blueprint) => {
     const sectionRows = bySection.get(blueprint.code) ?? [];
-    const counts = { active: 0, inactive: 0, draft: 0, drawable: 0, readyToActivate: 0, notReady: 0 };
+    const counts = { active: 0, inactive: 0, drawable: 0, readyToActivate: 0, notReady: 0 };
 
     for (const row of sectionRows) {
       tally(row, counts);

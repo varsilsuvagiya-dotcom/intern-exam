@@ -6,16 +6,15 @@ import Link from "next/link";
 import {
   DifficultyChip,
   QuestionActiveBadge,
-  QuestionStatusBadge,
 } from "@/components/admin/question-status-badge";
 import { Alert } from "@/components/ui/alert";
-import { Badge, Chip } from "@/components/ui/badge";
+import { Chip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { useActionToast } from "@/components/ui/toast";
 import type { QuestionListItem } from "@/lib/question-bank/query-questions";
 
-import { bulkActivate, bulkDeactivate, bulkSetStatus, type BulkState } from "./actions";
+import { bulkActivate, bulkDeactivate, type BulkState } from "./actions";
 
 /// The selectable question table.
 ///
@@ -76,9 +75,8 @@ export function QuestionTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activateState, activate, activating] = useActionState(bulkActivate, IDLE);
   const [deactivateState, deactivate, deactivating] = useActionState(bulkDeactivate, IDLE);
-  const [statusState, changeStatus, changingStatus] = useActionState(bulkSetStatus, IDLE);
 
-  const busy = activating || deactivating || changingStatus;
+  const busy = activating || deactivating;
   const ids = [...selected].join(",");
   const allShown = questions.length > 0 && questions.every((q) => selected.has(q.id));
 
@@ -104,12 +102,7 @@ export function QuestionTable({
   };
 
   // The most recent action's result is the one worth showing.
-  const state =
-    activateState.status !== "idle"
-      ? activateState
-      : deactivateState.status !== "idle"
-        ? deactivateState
-        : statusState;
+  const state = activateState.status !== "idle" ? activateState : deactivateState;
 
   // A success fires a toast, which auto-dismisses on its own (see
   // components/ui/toast.tsx); an error is left to the persistent Alert below.
@@ -155,23 +148,6 @@ export function QuestionTable({
             </Button>
           </form>
 
-          {/* Status is the authoring workflow, kept separate from activation:
-              marking a batch reviewed must not make it drawable. */}
-          {(["review", "ready", "draft"] as const).map((status) => (
-            <form action={changeStatus} key={status}>
-              <input type="hidden" name="ids" value={ids} />
-              <input type="hidden" name="status" value={status} />
-              <Button
-                type="submit"
-                variant="secondary"
-                size="sm"
-                disabled={selected.size === 0 || busy}
-              >
-                Mark {status}
-              </Button>
-            </form>
-          ))}
-
           {selected.size > 0 ? (
             <Button
               type="button"
@@ -210,9 +186,7 @@ export function QuestionTable({
                 <Th>Question</Th>
                 <Th>Section</Th>
                 <Th>Difficulty</Th>
-                <Th>Status</Th>
                 <Th>Active</Th>
-                <Th>Readiness</Th>
                 <Th align="right">Marks</Th>
                 <Th align="right">Edit</Th>
               </tr>
@@ -260,24 +234,15 @@ export function QuestionTable({
                     <DifficultyChip difficulty={question.difficulty} />
                   </Td>
                   <Td className="align-top">
-                    <QuestionStatusBadge status={question.status} />
-                  </Td>
-                  <Td className="align-top">
                     <QuestionActiveBadge isActive={question.isActive} />
-                  </Td>
-                  <Td className="align-top">
-                    {question.notReadyReasons.length === 0 ? (
-                      <Badge tone="success">Ready</Badge>
-                    ) : (
-                      <>
-                        <Badge tone="warning">Not ready</Badge>
-                        <p className="mt-1 max-w-[220px] text-xs text-muted">
-                          {question.notReadyReasons
-                            .map((reason) => reasonLabels[reason] ?? reason)
-                            .join("; ")}
-                        </p>
-                      </>
-                    )}
+                    {question.notReadyReasons.length > 0 ? (
+                      <p className="mt-1 max-w-[220px] text-xs text-warning">
+                        Not ready to activate:{" "}
+                        {question.notReadyReasons
+                          .map((reason) => reasonLabels[reason] ?? reason)
+                          .join("; ")}
+                      </p>
+                    ) : null}
                   </Td>
                   <Td align="right" className="align-top text-ink-secondary tabular">
                     {question.marks}

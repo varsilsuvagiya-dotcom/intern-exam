@@ -40,9 +40,7 @@ export async function importQuestions(rows: QuestionRow[]): Promise<ImportSummar
             //
             // A new question is created inactive. Activation is a deliberate
             // administrative act, so importing a file must never be enough to
-            // put a question in front of a candidate — not even later, when
-            // someone moves it from draft to ready. Those are two separate
-            // decisions and this keeps them that way.
+            // put a question in front of a candidate.
             //
             // `isActive` is deliberately absent from the update branch, and
             // `scored` from both. They are application state rather than source

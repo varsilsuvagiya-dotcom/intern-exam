@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
-import type { Difficulty, QuestionStatus } from "@/lib/generated/prisma/enums";
+import type { Difficulty } from "@/lib/generated/prisma/enums";
 
 import { isSectionCode, type SectionCode } from "@/lib/exam-settings/exam-blueprint";
 
@@ -10,7 +10,7 @@ import {
   checkActivationReadiness,
   type NotReadyReason,
 } from "./activation-readiness";
-import { DIFFICULTY_VALUES, STATUS_VALUES } from "./csv-contract";
+import { DIFFICULTY_VALUES } from "./csv-contract";
 
 /// Whether an inactive question would pass activation validation today.
 export const READINESS_VALUES = ["ready-to-activate", "not-ready"] as const;
@@ -23,7 +23,6 @@ export type QuestionFilters = {
   search: string;
   section: SectionCode | null;
   difficulty: Difficulty | null;
-  status: QuestionStatus | null;
   active: boolean | null;
   scored: boolean | null;
   /// Readiness is derived from the row contents, not stored, so it cannot be a
@@ -63,7 +62,6 @@ export function parseFilters(params: RawParams): QuestionFilters {
     search: readParam(params, "search").slice(0, 200),
     section,
     difficulty: DIFFICULTY_VALUES[readParam(params, "difficulty").toLowerCase()] ?? null,
-    status: STATUS_VALUES[readParam(params, "status").toLowerCase()] ?? null,
     active: tristate("active", "active"),
     scored: tristate("scored", "scored"),
     readiness: READINESS_VALUES.includes(readParam(params, "readiness") as Readiness)
@@ -98,7 +96,6 @@ function buildWhere(filters: QuestionFilters): Prisma.QuestionWhereInput {
 
   if (filters.section !== null) where.section = filters.section;
   if (filters.difficulty !== null) where.difficulty = filters.difficulty;
-  if (filters.status !== null) where.status = filters.status;
   if (filters.active !== null) where.isActive = filters.active;
   if (filters.scored !== null) where.scored = filters.scored;
 
@@ -114,7 +111,6 @@ export type QuestionListItem = {
   lessonGroup: string | null;
   marks: string;
   scored: boolean;
-  status: QuestionStatus;
   isActive: boolean;
   /// Why this question could not be activated, empty when it is fit. Derived
   /// per row so the table can explain a refusal in place.
@@ -150,7 +146,6 @@ export async function listQuestions(filters: QuestionFilters): Promise<QuestionL
     lessonGroup: true,
     marks: true,
     scored: true,
-    status: true,
     isActive: true,
   } as const;
 
@@ -168,7 +163,6 @@ export async function listQuestions(filters: QuestionFilters): Promise<QuestionL
     correct: string;
     lessonText: string | null;
     lessonGroup: string | null;
-    status: QuestionStatus;
     id: string;
     topic: string;
     scored: boolean;
@@ -186,7 +180,6 @@ export async function listQuestions(filters: QuestionFilters): Promise<QuestionL
       lessonGroup: row.lessonGroup,
       marks,
       scored: row.scored,
-      status: row.status,
       isActive: row.isActive,
       notReadyReasons: verdict.ready ? [] : verdict.reasons,
     };

@@ -4,7 +4,6 @@ import {
   DIFFICULTY_VALUES,
   OPTIONAL_COLUMNS,
   SOURCE_COLUMNS,
-  STATUS_VALUES,
   describeAccepted,
 } from "@/lib/question-bank/csv-contract";
 import { SECTION_BLUEPRINT } from "@/lib/exam-settings/exam-blueprint";
@@ -40,8 +39,8 @@ const GROUPS: { title: string; note: string; columns: string[] }[] = [
   },
   {
     title: "Internal",
-    note: "Admin reference and authoring status. Never shown to candidates.",
-    columns: ["verify_code", "marks", "status"],
+    note: "Admin reference only. Never shown to candidates.",
+    columns: ["verify_code", "marks"],
   },
 ];
 
@@ -116,9 +115,6 @@ export function CsvReference() {
 
           <dt className="text-muted">correct</dt>
           <dd className="font-mono text-xs text-ink-secondary">a, b, c, d</dd>
-
-          <dt className="text-muted">status</dt>
-          <dd className="font-mono text-xs text-ink-secondary">{describeAccepted(STATUS_VALUES)}</dd>
         </dl>
       </div>
     </details>

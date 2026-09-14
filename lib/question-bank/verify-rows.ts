@@ -7,7 +7,6 @@ import {
   MAX_ID_LENGTH,
   MAX_TOPIC_LENGTH,
   OPTION_VALUES,
-  STATUS_VALUES,
 } from "./csv-contract";
 import type { QuestionRow } from "./csv-import";
 import { validateMarks, validateQuestionRules } from "./question-rules";
@@ -88,9 +87,8 @@ export function verifyRows(value: unknown): QuestionRow[] | null {
     const section = typeof sectionRaw === "string" && isSectionCode(sectionRaw) ? sectionRaw : null;
     const difficulty = DIFFICULTY_VALUES[(text("difficulty") ?? "").toLowerCase()];
     const correct = OPTION_VALUES[(text("correct") ?? "").toLowerCase()];
-    const status = STATUS_VALUES[(text("status") ?? "").toLowerCase()];
 
-    if (section === null || !difficulty || !correct || !status || validateMarks(marks)) {
+    if (section === null || !difficulty || !correct || validateMarks(marks)) {
       return null;
     }
 
@@ -133,7 +131,6 @@ export function verifyRows(value: unknown): QuestionRow[] | null {
       lessonText,
       lessonGroup,
       marks,
-      status,
     });
   }
 

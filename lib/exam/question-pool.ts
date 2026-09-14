@@ -74,7 +74,7 @@ const globalForPool = globalThis as unknown as {
 
 async function readPool(): Promise<PoolRow[]> {
   const rows = await prisma.question.findMany({
-    where: { status: "ready", isActive: true },
+    where: { isActive: true },
     select: {
       id: true,
       section: true,

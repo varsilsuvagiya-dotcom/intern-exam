@@ -37,7 +37,6 @@ export default async function QuestionBankPage({
     if (filters.search) query.set("search", filters.search);
     if (filters.section !== null) query.set("section", String(filters.section));
     if (filters.difficulty) query.set("difficulty", filters.difficulty);
-    if (filters.status) query.set("status", filters.status);
     if (filters.active !== null) query.set("active", filters.active ? "active" : "inactive");
     if (filters.scored !== null) query.set("scored", filters.scored ? "scored" : "unscored");
     if (filters.readiness !== null) query.set("readiness", filters.readiness);
@@ -53,7 +52,6 @@ export default async function QuestionBankPage({
     Boolean(filters.search) ||
     filters.section !== null ||
     filters.difficulty !== null ||
-    filters.status !== null ||
     filters.active !== null ||
     filters.scored !== null ||
     filters.readiness !== null;
@@ -119,18 +117,6 @@ export default async function QuestionBankPage({
             ["easy", "Easy"],
             ["medium", "Medium"],
             ["hard", "Hard"],
-          ]}
-        />
-        <SelectField
-          id="questions-status"
-          name="status"
-          label="Status"
-          value={filters.status ?? ""}
-          options={[
-            ["", "All"],
-            ["draft", "Draft"],
-            ["review", "Review"],
-            ["ready", "Ready"],
           ]}
         />
         <SelectField

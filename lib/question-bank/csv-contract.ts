@@ -1,13 +1,18 @@
 import "server-only";
 
 import { SECTION_CODES } from "@/lib/exam-settings/exam-blueprint";
-import { Difficulty, OptionKey, QuestionStatus } from "@/lib/generated/prisma/enums";
+import { Difficulty, OptionKey } from "@/lib/generated/prisma/enums";
 
 /// The question-bank import contract.
 ///
-/// These are the sixteen source fields the client has confirmed. Everything
+/// These are the fifteen source fields the client has confirmed. Everything
 /// else a source file happens to carry is ignored rather than stored: an
 /// unsupported column is not question data.
+///
+/// `status` is deliberately not one of them. Every imported question starts
+/// inactive regardless of what a source file says, so there is nothing for a
+/// status column to mean at import time — activation is a separate,
+/// deliberate admin action (see bulk-activation.ts / update-question.ts).
 ///
 /// Columns are matched by normalized header name, never by position, so the
 /// physical order of columns in an uploaded file is irrelevant.
@@ -28,7 +33,6 @@ export const SOURCE_COLUMNS = [
   "explanation",
   "lesson_text",
   "marks",
-  "status",
 ] as const;
 
 export type SourceColumn = (typeof SOURCE_COLUMNS)[number];
@@ -65,12 +69,6 @@ export const DIFFICULTY_VALUES: Record<string, Difficulty> = {
   easy: Difficulty.easy,
   medium: Difficulty.medium,
   hard: Difficulty.hard,
-};
-
-export const STATUS_VALUES: Record<string, QuestionStatus> = {
-  draft: QuestionStatus.draft,
-  review: QuestionStatus.review,
-  ready: QuestionStatus.ready,
 };
 
 export const OPTION_VALUES: Record<string, OptionKey> = {

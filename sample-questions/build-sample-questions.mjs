@@ -31,7 +31,7 @@ const HEADERS = [
   "id", "section", "topic", "difficulty", "question", "code_block", "verify_code",
   "option_a", "option_b", "option_c", "option_d", "correct", "explanation",
   "lesson_text", "lesson_group", "scored", "marks", "source_batch", "dupe_group",
-  "machine_verified", "blind_agrees", "conflict_reason", "trainer_verified", "status",
+  "machine_verified", "blind_agrees", "conflict_reason", "trainer_verified",
 ];
 
 /// [topic, difficulty, question, code_block, a, b, c, d, correct, explanation]
@@ -210,7 +210,6 @@ for (const { code, marks, rows } of SECTIONS) {
       "",
       "",
       "",
-      "draft",
     ]);
   });
 

@@ -11,10 +11,8 @@ import {
 import {
   activateQuestions,
   deactivateQuestions,
-  setQuestionsStatus,
   type BulkResult,
 } from "@/lib/question-bank/bulk-activation";
-import { STATUS_VALUES } from "@/lib/question-bank/csv-contract";
 
 /// Bulk actions on a question selection.
 ///
@@ -114,25 +112,3 @@ export async function bulkDeactivate(_prev: BulkState, formData: FormData): Prom
   }
 }
 
-export async function bulkSetStatus(_prev: BulkState, formData: FormData): Promise<BulkState> {
-  await requireAdmin();
-
-  // The status is chosen from a fixed set server-side; an arbitrary string from
-  // the client never reaches the database.
-  const status = STATUS_VALUES[String(formData.get("status") ?? "").toLowerCase()];
-
-  if (!status) {
-    return { status: "error", message: "Choose a valid status." };
-  }
-
-  try {
-    const result = await setQuestionsStatus(readIds(formData), status);
-    if (result.ok) refresh();
-    return toState(result, `moved to ${status}`);
-  } catch (error) {
-    console.error("Bulk status change failed.", {
-      name: error instanceof Error ? error.name : "UnknownError",
-    });
-    return { status: "error", message: "The change could not be saved." };
-  }
-}

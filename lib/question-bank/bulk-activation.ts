@@ -43,7 +43,6 @@ const ACTIVATION_SELECT = {
   lessonText: true,
   lessonGroup: true,
   marks: true,
-  status: true,
 } as const;
 
 function normalizeIds(ids: string[]): string[] {
@@ -109,33 +108,6 @@ export async function deactivateQuestions(rawIds: string[]): Promise<BulkResult>
   const result = await prisma.question.updateMany({
     where: { id: { in: ids } },
     data: { isActive: false },
-  });
-
-  return { ok: true, changed: result.count };
-}
-
-/// Moves a selection along the authoring workflow without touching `isActive`.
-///
-/// Kept separate from activation on purpose: promoting a question to `ready`
-/// records that review is done, and must not by itself make it drawable. The
-/// two decisions stay two actions.
-export async function setQuestionsStatus(
-  rawIds: string[],
-  status: "draft" | "review" | "ready",
-): Promise<BulkResult> {
-  const ids = normalizeIds(rawIds);
-
-  if (ids.length === 0) {
-    return { ok: false, code: "EMPTY_SELECTION" };
-  }
-
-  if (ids.length > MAX_BULK_IDS) {
-    return { ok: false, code: "TOO_MANY", limit: MAX_BULK_IDS };
-  }
-
-  const result = await prisma.question.updateMany({
-    where: { id: { in: ids } },
-    data: { status },
   });
 
   return { ok: true, changed: result.count };

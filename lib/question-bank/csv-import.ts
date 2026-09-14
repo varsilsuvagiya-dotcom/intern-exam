@@ -1,7 +1,7 @@
 import "server-only";
 
 import { LESSON_SECTION, resolveSectionCode, type SectionCode } from "@/lib/exam-settings/exam-blueprint";
-import type { Difficulty, OptionKey, QuestionStatus } from "@/lib/generated/prisma/enums";
+import type { Difficulty, OptionKey } from "@/lib/generated/prisma/enums";
 
 import {
   DIFFICULTY_VALUES,
@@ -10,7 +10,6 @@ import {
   OPTIONAL_COLUMNS,
   OPTION_VALUES,
   SOURCE_COLUMNS,
-  STATUS_VALUES,
   describeAccepted,
   describeSectionCodes,
   isSupportedColumn,
@@ -42,7 +41,6 @@ export type QuestionRow = {
   lessonText: string | null;
   lessonGroup: string | null;
   marks: string;
-  status: QuestionStatus;
 };
 
 /// Where a problem was found. `file` and `sheet` are present because one import
@@ -188,14 +186,6 @@ function validateRow(
     );
   }
 
-  const status = STATUS_VALUES[read("status").toLowerCase()];
-  if (!status) {
-    fail(
-      "status",
-      `status must be one of ${describeAccepted(STATUS_VALUES)}, received "${read("status")}"`,
-    );
-  }
-
   const marks = read("marks");
   const marksError = validateMarks(marks);
   if (marksError) {
@@ -239,7 +229,6 @@ function validateRow(
     // batch is known, in deriveLessonGroups() below.
     lessonGroup: null,
     marks,
-    status: status as QuestionStatus,
   };
 }
 

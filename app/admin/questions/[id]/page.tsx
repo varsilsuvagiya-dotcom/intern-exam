@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import {
   DifficultyChip,
   QuestionActiveBadge,
-  QuestionStatusBadge,
 } from "@/components/admin/question-status-badge";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { Chip } from "@/components/ui/badge";
@@ -42,14 +41,13 @@ export default async function QuestionDetailPage({
         description={`Created ${formatDate(question.createdAt)} · Last updated ${formatDate(question.updatedAt)}`}
       />
 
-      {/* Identity and current state, read-only. The editable copies of status,
+      {/* Identity and current state, read-only. The editable copies of
           difficulty and section live in the form; these are here so the page
           identifies itself without the admin having to read the controls. */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs break-all text-muted">{question.id}</span>
         <Chip>{question.section}</Chip>
         <DifficultyChip difficulty={question.difficulty} />
-        <QuestionStatusBadge status={question.status} />
         <QuestionActiveBadge isActive={question.isActive} />
       </div>
 
@@ -80,7 +78,6 @@ export default async function QuestionDetailPage({
           marks: question.marks.toString(),
           aiVerified: question.aiVerified,
           trainerVerified: question.trainerVerified,
-          status: question.status,
           isActive: question.isActive,
         }}
       />

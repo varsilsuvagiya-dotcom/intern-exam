@@ -24,7 +24,7 @@ export function BankTotals({ totals }: { totals: BankReadiness["totals"] }) {
       <Stat label="Total" value={totals.total} />
       <Stat label="Active" value={totals.active} />
       <Stat label="Inactive" value={totals.inactive} />
-      <Stat label="Draft" value={totals.draft} />
+      <Stat label="Not ready" value={totals.notReady} />
       <Stat label="Ready to activate" value={totals.readyToActivate} />
       <Stat label="Drawable" value={totals.drawable} />
     </div>
@@ -39,7 +39,7 @@ export function SectionReadinessTable({ sections }: { sections: BankReadiness["s
           <Th>Section</Th>
           <Th align="right">Required</Th>
           <Th align="right">Total</Th>
-          <Th align="right">Draft</Th>
+          <Th align="right">Not ready</Th>
           <Th align="right">Inactive</Th>
           <Th align="right">Drawable</Th>
           <Th>Status</Th>
@@ -50,7 +50,7 @@ export function SectionReadinessTable({ sections }: { sections: BankReadiness["s
           <Tr key={section.code}>
             <Td>
               <p className="font-medium text-ink">
-                {section.code} &middot; {section.name}
+                {section.name} &middot; {section.code}
               </p>
               {section.marksMismatch ? (
                 <p className="mt-1 text-xs text-warning">
@@ -66,7 +66,7 @@ export function SectionReadinessTable({ sections }: { sections: BankReadiness["s
               {section.total}
             </Td>
             <Td align="right" className="tabular text-ink-secondary">
-              {section.draft}
+              {section.notReady}
             </Td>
             <Td align="right" className="tabular text-ink-secondary">
               {section.inactive}

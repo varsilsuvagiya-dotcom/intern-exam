@@ -16,12 +16,6 @@ enum Difficulty {
   hard
 }
 
-enum QuestionStatus {
-  draft
-  review
-  ready
-}
-
 enum OptionKey {
   a
   b
@@ -70,15 +64,18 @@ model Question {
   marks           Decimal        @db.Decimal(4, 2)
   aiVerified      Boolean        @default(false) @map("ai_verified")
   trainerVerified Boolean        @default(false) @map("trainer_verified")
-  status          QuestionStatus @default(draft)
-  isActive        Boolean        @default(true) @map("is_active")
+  /// Whether the question is eligible to be drawn into a newly generated
+  /// paper. The only state a question has beyond its content: active or not.
+  /// A freshly imported question always starts inactive — activation is a
+  /// deliberate administrative act, never a side effect of import.
+  isActive        Boolean        @default(false) @map("is_active")
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
 
   attemptQuestions AttemptQuestion[]
 
-  // Drawing a paper filters on section + status + is_active + difficulty.
-  @@index([section, status, isActive, difficulty])
+  // Drawing a paper filters on section + is_active + difficulty.
+  @@index([section, isActive, difficulty])
   @@index([lessonGroup])
   @@map("questions")
 }

@@ -393,7 +393,6 @@ export function ImportForm() {
                     <Th>Difficulty</Th>
                     <Th>Correct</Th>
                     <Th align="right">Marks</Th>
-                    <Th>Status</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -412,7 +411,6 @@ export function ImportForm() {
                       <Td align="right" className="text-ink-secondary tabular">
                         {row.marks}
                       </Td>
-                      <Td className="text-ink-secondary">{row.status}</Td>
                     </Tr>
                   ))}
                 </tbody>

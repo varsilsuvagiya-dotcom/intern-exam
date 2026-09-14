@@ -20,7 +20,6 @@ export type PreviewRow = {
   difficulty: string;
   correct: string;
   marks: string;
-  status: string;
 };
 
 /// What one upload contained, per section, so an admin can see at a glance that
@@ -99,7 +98,6 @@ export async function previewImport(
       difficulty: row.difficulty,
       correct: row.correct,
       marks: row.marks,
-      status: row.status,
     })),
     sections: summarizeSections(parsed.rows),
     skipped: parsed.skipped,
