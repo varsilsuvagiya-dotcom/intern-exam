@@ -20,7 +20,7 @@ export default async function ExamStartPage() {
   const { totalQuestions, totalMarks } = examBlueprintSummary();
 
   return (
-    <main className="flex flex-1 flex-col items-center px-4 py-10 sm:px-6 md:py-14">
+    <main className="flex flex-1 flex-col items-center px-4 py-6 sm:px-6">
       <div className="w-full max-w-xl">
         <div className="flex flex-col items-center text-center">
           <Image
@@ -29,12 +29,12 @@ export default async function ExamStartPage() {
             width={2825}
             height={685}
             priority
-            className="h-9 w-auto max-w-full object-contain"
+            className="h-12 w-auto max-w-full object-contain"
           />
-          <h1 className="mt-6 text-2xl font-semibold tracking-tight text-exam-ink sm:text-[28px]">
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-exam-ink sm:text-[28px]">
             {settings.examName}
           </h1>
-          <p className="mt-2 text-sm text-exam-muted">
+          <p className="mt-1.5 text-sm text-exam-muted">
             {settings.isOpen
               ? "Please read the information below, then enter your details to begin."
               : "This examination is not currently open."}
@@ -47,9 +47,9 @@ export default async function ExamStartPage() {
               totalQuestions={totalQuestions}
               totalMarks={totalMarks}
               durationMinutes={settings.durationMinutes}
-              className="mt-8"
+              className="mt-5"
             />
-            <StartForm className="mt-6" />
+            <StartForm className="mt-4" />
           </>
         ) : (
           <ExamClosedNotice className="mt-8" />
