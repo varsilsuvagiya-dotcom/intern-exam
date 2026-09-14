@@ -9,6 +9,8 @@ export const SETTINGS_ID = "singleton";
 export const EXAM_NAME_MAX = 120;
 export const DURATION_MIN = 1;
 export const DURATION_MAX = 1440;
+export const VIOLATION_LIMIT_MIN = 1;
+export const VIOLATION_LIMIT_MAX = 20;
 
 export type ExamSettings = {
   examName: string;
@@ -17,6 +19,7 @@ export type ExamSettings = {
   easyPercent: number;
   mediumPercent: number;
   hardPercent: number;
+  unauthorizedActivityLimit: number;
   updatedAt: Date;
 };
 
@@ -39,6 +42,7 @@ export async function getExamSettings(): Promise<ExamSettings> {
       easyPercent: true,
       mediumPercent: true,
       hardPercent: true,
+      unauthorizedActivityLimit: true,
       updatedAt: true,
     },
   });
@@ -63,6 +67,7 @@ export type SettingsUpdate = {
   easyPercent: number;
   mediumPercent: number;
   hardPercent: number;
+  unauthorizedActivityLimit: number;
 };
 
 export function validateSettings(form: FormData):
@@ -118,6 +123,21 @@ export function validateSettings(form: FormData):
     }
   }
 
+  const limitRaw = String(form.get("unauthorizedActivityLimit") ?? "").trim();
+  const unauthorizedActivityLimit = Number(limitRaw);
+
+  if (!/^\d+$/.test(limitRaw) || !Number.isInteger(unauthorizedActivityLimit)) {
+    errors.push({
+      field: "unauthorizedActivityLimit",
+      message: "Unauthorized activity limit must be a whole number.",
+    });
+  } else if (unauthorizedActivityLimit < VIOLATION_LIMIT_MIN || unauthorizedActivityLimit > VIOLATION_LIMIT_MAX) {
+    errors.push({
+      field: "unauthorizedActivityLimit",
+      message: `Unauthorized activity limit must be between ${VIOLATION_LIMIT_MIN} and ${VIOLATION_LIMIT_MAX}.`,
+    });
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -131,6 +151,7 @@ export function validateSettings(form: FormData):
       easyPercent,
       mediumPercent,
       hardPercent,
+      unauthorizedActivityLimit,
     },
   };
 }

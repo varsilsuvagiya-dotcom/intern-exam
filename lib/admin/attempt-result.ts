@@ -118,6 +118,8 @@ export type AttemptResult =
   | { kind: "not-found" }
   /// Still running. Metadata only: no score, no answer key, no review.
   | { kind: "in-progress"; summary: AttemptSummary }
+  /// Ended by the anti-cheating limit. Never scored, and never will be.
+  | { kind: "terminated"; summary: AttemptSummary }
   /// Finalized, but Phase 12 scoring has not stored a result yet.
   | { kind: "scoring-pending"; summary: AttemptSummary }
   | {
@@ -332,6 +334,10 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
   // loaded means the answer key cannot reach the page even by accident.
   if (attempt.status === "in_progress") {
     return { kind: "in-progress", summary };
+  }
+
+  if (attempt.status === "terminated") {
+    return { kind: "terminated", summary };
   }
 
   if (attempt.scoredAt === null || attempt.totalScore === null) {

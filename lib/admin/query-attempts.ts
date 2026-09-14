@@ -18,6 +18,7 @@ const STATUS_VALUES: Record<string, AttemptStatus> = {
   in_progress: "in_progress",
   submitted: "submitted",
   auto_submitted: "auto_submitted",
+  terminated: "terminated",
 };
 
 /// Human labels for the stored enum. The stored value itself is never changed.
@@ -25,6 +26,7 @@ export const STATUS_LABELS: Record<AttemptStatus, string> = {
   in_progress: "In Progress",
   submitted: "Submitted",
   auto_submitted: "Auto Submitted",
+  terminated: "Terminated",
 };
 
 /// The only orderings the page will ever run. A sort key that is not in this
@@ -133,7 +135,11 @@ export type AttemptScoring =
   | { kind: "not-finalized" }
   /// Finalized, but scoring has not stored a result yet.
   | { kind: "pending" }
-  | { kind: "scored"; totalScore: string; maxScore: string };
+  | { kind: "scored"; totalScore: string; maxScore: string }
+  /// Ended by the anti-cheating limit. Never scored, unlike submitted /
+  /// auto_submitted, so it is its own outcome rather than a scoring state
+  /// that will eventually resolve.
+  | { kind: "terminated" };
 
 export type AttemptListItem = {
   id: string;
@@ -150,6 +156,7 @@ export type AttemptListItem = {
   /// registered details. Surfaced so an admin can spot a mismatch.
   enteredName: string | null;
   enteredEmail: string | null;
+  violationCount: number;
 };
 
 export type AttemptListResult = {
@@ -171,6 +178,10 @@ function scoringOf(row: {
 }): AttemptScoring {
   if (row.status === "in_progress") {
     return { kind: "not-finalized" };
+  }
+
+  if (row.status === "terminated") {
+    return { kind: "terminated" };
   }
 
   if (row.scoredAt === null || row.totalScore === null) {
@@ -225,6 +236,7 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
         enteredName: true,
         enteredEmail: true,
         candidateId: true,
+        violationCount: true,
         candidate: { select: { name: true, email: true, mobile: true } },
       },
     }),
@@ -244,6 +256,7 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
       candidateMobile: row.candidate.mobile,
       enteredName: row.enteredName,
       enteredEmail: row.enteredEmail,
+      violationCount: row.violationCount,
     })),
     total,
     page: filters.page,

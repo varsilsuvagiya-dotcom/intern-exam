@@ -28,5 +28,9 @@ export function ScoreCell({ scoring }: { scoring: AttemptScoring }) {
     return <Badge tone="warning">Scoring pending</Badge>;
   }
 
+  if (scoring.kind === "terminated") {
+    return <span className="text-[13px] whitespace-nowrap text-muted">Not scored</span>;
+  }
+
   return <span className="text-[13px] whitespace-nowrap text-muted">Not finalized</span>;
 }

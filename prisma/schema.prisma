@@ -27,6 +27,33 @@ enum AttemptStatus {
   in_progress
   submitted
   auto_submitted
+  /// Ended by the server because the candidate's unauthorized-activity count
+  /// reached the configured limit. Distinct from auto_submitted, which is
+  /// purely a timing outcome and carries no wrongdoing.
+  terminated
+}
+
+/// Why an attempt was moved to `terminated`. A single value today, but kept as
+/// an enum (rather than inferring the reason from `status` alone) so a future
+/// termination cause does not have to overload this one.
+enum TerminationReason {
+  UNAUTHORIZED_ACTIVITY
+}
+
+enum ViolationType {
+  TAB_SWITCH
+  WINDOW_BLUR
+  FULLSCREEN_EXIT
+  COPY
+  CUT
+  PASTE
+  CONTEXT_MENU
+  KEYBOARD_SHORTCUT
+  DEVTOOLS
+  PRINT
+  PAGE_LEAVE
+  DRAG_DROP
+  OTHER
 }
 
 /// Question bank. `id` is the stable identifier carried in from the CSV, so
@@ -138,6 +165,12 @@ model Attempt {
   /// candidate backwards. Visited state needs no equivalent: it is set-once per
   /// row and therefore cannot lose an earlier visit.
   currentPositionSeq  Int       @default(0) @map("current_position_seq")
+  /// Server-authoritative count of recorded ExamViolation rows. Mirrors
+  /// ExamViolation's count for this attempt; kept as a denormalized counter so
+  /// the limit check does not require a count(*) on every violation.
+  violationCount  Int           @default(0) @map("violation_count")
+  /// Set only when status is `terminated`.
+  terminationReason TerminationReason? @map("termination_reason")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
@@ -145,6 +178,7 @@ model Attempt {
   attemptQuestions AttemptQuestion[]
   answers          Answer[]
   examSessions     ExamSession[]
+  violations       ExamViolation[]
 
   // "One active attempt per candidate" is a partial unique index on
   // (candidate_id) WHERE status = 'in_progress'. Prisma's schema syntax has no
@@ -155,6 +189,27 @@ model Attempt {
   @@index([submittedAt])
   @@index([scoredAt])
   @@map("attempts")
+}
+
+/// One detected anti-cheating event during a sitting. Append-only audit trail:
+/// rows are never updated or deleted, only created as events are detected.
+model ExamViolation {
+  id         String        @id @default(uuid())
+  attemptId  String        @map("attempt_id")
+  type       ViolationType
+  detectedAt DateTime      @default(now()) @map("detected_at")
+  /// Safe, non-identifying detail only (e.g. which key combo, which fullscreen
+  /// element). Never free-form candidate input.
+  metadata   Json?
+  /// 1-based order among this attempt's violations, so the admin log and the
+  /// "Warning N of LIMIT" wording share one authoritative counter.
+  sequence   Int
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId, sequence])
+  @@map("exam_violations")
 }
 
 /// The drawn paper, persisted once at exam start so refresh/resume never redraws.
@@ -247,6 +302,10 @@ model ExamSetting {
   easyPercent     Int      @default(40) @map("easy_percent")
   mediumPercent   Int      @default(40) @map("medium_percent")
   hardPercent     Int      @default(20) @map("hard_percent")
+  /// Number of recorded violations a single attempt may reach before it is
+  /// automatically terminated. Not a UI constant: the anti-cheating layer
+  /// always reads this rather than a hardcoded number.
+  unauthorizedActivityLimit Int @default(3) @map("unauthorized_activity_limit")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 

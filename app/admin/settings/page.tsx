@@ -44,6 +44,7 @@ export default async function ExamSettingsPage() {
           easyPercent: settings.easyPercent,
           mediumPercent: settings.mediumPercent,
           hardPercent: settings.hardPercent,
+          unauthorizedActivityLimit: settings.unauthorizedActivityLimit,
         }}
       />
 

@@ -20,6 +20,7 @@ export type EditableSettings = {
   easyPercent: number;
   mediumPercent: number;
   hardPercent: number;
+  unauthorizedActivityLimit: number;
 };
 
 /// A titled group of related settings. Each answers "what does this control?"
@@ -311,6 +312,33 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
             <span>{errorFor("difficultyMix")}</span>
           </p>
         ) : null}
+      </Group>
+
+      <Group
+        title="Anti-cheating"
+        description="How many unauthorized-activity warnings (tab switches, copy attempts, and similar) a candidate may accumulate before their attempt is automatically terminated."
+      >
+        <div className="sm:max-w-[260px]">
+          <Field
+            id={fieldId("unauthorizedActivityLimit")}
+            label="Unauthorized activity limit"
+            suffix="violations"
+            error={errorFor("unauthorizedActivityLimit")}
+            hint="A whole number between 1 and 20."
+          >
+            {({ id, describedBy, invalid }) => (
+              <Input
+                id={id}
+                name="unauthorizedActivityLimit"
+                defaultValue={settings.unauthorizedActivityLimit}
+                inputMode="numeric"
+                aria-describedby={describedBy}
+                invalid={invalid}
+                className="tabular"
+              />
+            )}
+          </Field>
+        </div>
       </Group>
 
       <div className="flex flex-wrap items-center gap-3 pt-1">

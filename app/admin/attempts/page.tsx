@@ -235,6 +235,15 @@ export default async function AttemptsPage({
                     </Td>
                     <Td>
                       <AttemptStatusBadge status={attempt.status} label={attempt.statusLabel} />
+                      {attempt.violationCount > 0 ? (
+                        <Link
+                          href={`/admin/attempts/${encodeURIComponent(attempt.id)}?back=${encodeURIComponent(backQuery)}`}
+                          className="ml-1.5 inline-flex items-center rounded-sm bg-danger-bg px-1.5 py-0.5 text-xs font-medium text-danger hover:underline"
+                          title="Unauthorized activity detected"
+                        >
+                          {attempt.violationCount} unauthorized
+                        </Link>
+                      ) : null}
                     </Td>
                     <Td className="text-[13px] text-muted tabular whitespace-nowrap">
                       {formatDate(attempt.startedAt)}

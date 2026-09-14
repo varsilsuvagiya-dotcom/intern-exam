@@ -10,6 +10,7 @@ import { loadProgress } from "@/lib/exam/exam-progress";
 import { loadAnswers } from "@/lib/exam/save-answer";
 
 import { CompletionScreen } from "./completion-screen";
+import { TerminationScreen } from "./termination-screen";
 import { ExamShell } from "./exam-shell";
 
 export const metadata: Metadata = { title: "Exam" };
@@ -44,8 +45,13 @@ export default async function ExamPage() {
     select: { status: true },
   });
 
-  if (finished && finished.status !== "in_progress") {
-    return <CompletionScreen status={finished.status} />;
+  if (finished) {
+    if (finished.status === "terminated") {
+      return <TerminationScreen />;
+    }
+    if (finished.status !== "in_progress") {
+      return <CompletionScreen status={finished.status} />;
+    }
   }
 
   const access = await getCandidatePaper(attemptId);

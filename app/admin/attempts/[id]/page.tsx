@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { AttemptStatusBadge } from "@/components/admin/attempt-status-badge";
+import { ViolationPanel } from "@/components/admin/violation-panel";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { Alert } from "@/components/ui/alert";
 import { buttonClass } from "@/components/ui/button";
@@ -12,8 +13,10 @@ import {
   type AttemptSummary,
   type ReviewSection,
 } from "@/lib/admin/attempt-result";
+import { getViolationSummary } from "@/lib/admin/attempt-violations";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
+import { fetchAttemptViolations } from "./actions";
 import { QuestionReviewCard } from "./question-review-card";
 import { SectionScoreTable } from "./section-score-table";
 
@@ -148,7 +151,7 @@ export default async function AttemptResultPage({
   await requireAdmin();
 
   const { id } = await params;
-  const result = await getAttemptResult(id);
+  const [result, violations] = await Promise.all([getAttemptResult(id), getViolationSummary(id)]);
 
   if (result.kind === "not-found") {
     notFound();
@@ -190,10 +193,23 @@ export default async function AttemptResultPage({
         <AttemptPanel summary={summary} />
       </div>
 
+      {violations ? (
+        <div className="mt-4">
+          <ViolationPanel attemptId={id} initial={violations} fetchSummary={fetchAttemptViolations} />
+        </div>
+      ) : null}
+
       {result.kind === "in-progress" ? (
         <Alert tone="info" title="Attempt in progress" className="mt-4">
           This attempt has not been finalized, so there is no result to review. Correct answers,
           explanations and scoring are deliberately withheld while an exam is still running.
+        </Alert>
+      ) : null}
+
+      {result.kind === "terminated" ? (
+        <Alert tone="danger" title="Terminated for unauthorized activity" className="mt-4">
+          This attempt was automatically ended after the candidate&rsquo;s unauthorized-activity count
+          reached the configured limit. It was never scored.
         </Alert>
       ) : null}
 

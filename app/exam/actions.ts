@@ -10,6 +10,8 @@ import {
 } from "@/lib/exam/finalize-attempt";
 import { saveProgress, type SaveProgressResult } from "@/lib/exam/exam-progress";
 import { saveAnswer, type SaveResult } from "@/lib/exam/save-answer";
+import { recordViolation } from "@/lib/exam/anti-cheating/service";
+import type { RecordViolationResult, ViolationType } from "@/lib/exam/anti-cheating/types";
 
 export type TimingResponse =
   | { kind: "ok"; timing: TimingState }
@@ -79,6 +81,16 @@ export async function persistProgress(
   }
 
   return saveProgress(attemptId, attemptQuestionId, sequence);
+}
+
+/// Reports a detected anti-cheating event. `type` only names what the browser
+/// saw; the attempt, the running count and the limit are all resolved and
+/// enforced server-side — see recordViolation for the full contract.
+export async function reportViolation(
+  type: ViolationType,
+  metadata?: Record<string, unknown>,
+): Promise<RecordViolationResult> {
+  return recordViolation(type, metadata);
 }
 
 export async function persistAnswer(

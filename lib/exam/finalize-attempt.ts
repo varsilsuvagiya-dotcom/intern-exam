@@ -12,6 +12,10 @@ export type FinalizeResult =
   | { kind: "finalized"; status: TerminalStatus; alreadyFinal: boolean }
   /// An automatic submission arrived while time still remained; the exam stays open.
   | { kind: "not-expired" }
+  /// The attempt was already ended by the anti-cheating limit, not by a
+  /// submission. A racing submit or auto-submit finds this instead of a
+  /// terminal status it knows how to render as a normal completion.
+  | { kind: "terminated" }
   | { kind: "not-found" };
 
 export type SubmissionSummary =
@@ -24,7 +28,8 @@ export type SubmissionSummary =
       expired: boolean;
     }
   | { kind: "not-found" }
-  | { kind: "finished"; status: TerminalStatus };
+  | { kind: "finished"; status: TerminalStatus }
+  | { kind: "terminated" };
 
 /// A question counts as answered when the stored row holds something real: a
 /// chosen option, or free text with more than whitespace in it. Read from the
@@ -53,6 +58,10 @@ export async function getSubmissionSummary(attemptId: string): Promise<Submissio
 
   if (!attempt) {
     return { kind: "not-found" };
+  }
+
+  if (attempt.status === "terminated") {
+    return { kind: "terminated" };
   }
 
   if (attempt.status !== "in_progress") {
@@ -137,6 +146,10 @@ export async function finalizeAttempt(
     return { kind: "not-found" };
   }
 
+  if (attempt.status === "terminated") {
+    return { kind: "terminated" };
+  }
+
   if (attempt.status !== "in_progress") {
     return { kind: "finalized", status: attempt.status, alreadyFinal: true };
   }
@@ -178,5 +191,47 @@ export async function finalizeAttempt(
     return { kind: "not-found" };
   }
 
+  if (settled.status === "terminated") {
+    return { kind: "terminated" };
+  }
+
   return { kind: "finalized", status: settled.status, alreadyFinal: true };
+}
+
+/// Ends an attempt because its recorded violation count reached the
+/// configured limit.
+///
+/// Mirrors `finalizeAttempt` exactly: same conditional `updateMany` guarded on
+/// `status = in_progress`, so this cannot race a manual submit, an
+/// auto-submit, or a second violation crossing the limit at the same instant
+/// — exactly one of them wins the transition, and every other caller learns
+/// the state that won rather than overwriting it. A terminated attempt is
+/// never scored: there is nothing to grade, and scoring is not called here.
+///
+/// Called only from the anti-cheating violation service
+/// (lib/exam/anti-cheating/service.ts), never directly from a Server Action —
+/// the caller is responsible for deciding the limit was actually reached.
+export async function terminateForViolation(
+  attemptId: string,
+): Promise<{ kind: "terminated"; alreadyFinal: false } | { kind: "already-final" } | { kind: "not-found" }> {
+  const result = await prisma.attempt.updateMany({
+    where: { id: attemptId, status: "in_progress" },
+    data: { status: "terminated", terminationReason: "UNAUTHORIZED_ACTIVITY", submittedAt: new Date() },
+  });
+
+  if (result.count === 1) {
+    console.info("Attempt terminated for unauthorized activity.");
+    return { kind: "terminated", alreadyFinal: false };
+  }
+
+  const settled = await prisma.attempt.findUnique({
+    where: { id: attemptId },
+    select: { status: true },
+  });
+
+  if (!settled) {
+    return { kind: "not-found" };
+  }
+
+  return settled.status === "in_progress" ? { kind: "not-found" } : { kind: "already-final" };
 }

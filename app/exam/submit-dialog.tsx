@@ -135,12 +135,18 @@ export function SubmitDialog({
   disabled,
   flushPending,
   onFinalized,
+  onTerminated,
 }: {
   disabled: boolean;
   /// Waits for any debounced save still in flight, so the counts below describe
   /// what is actually stored rather than what the browser hopes is stored.
   flushPending: () => Promise<boolean>;
   onFinalized: (status: TerminalStatus) => void;
+  /// The attempt was already ended by the anti-cheating limit before this
+  /// dialog could finalize it — a real race, not a hypothetical one, since a
+  /// violation can land in the moment between opening this dialog and
+  /// confirming.
+  onTerminated: () => void;
 }) {
   const [state, setState] = useState<State>({ phase: "closed" });
 
@@ -165,6 +171,11 @@ export function SubmitDialog({
       }
 
       const summary = await withTimeout(fetchSubmissionSummary());
+
+      if (summary.kind === "terminated") {
+        onTerminated();
+        return;
+      }
 
       if (summary.kind === "finished") {
         onFinalized(summary.status);
@@ -192,7 +203,7 @@ export function SubmitDialog({
         retry: "open",
       });
     }
-  }, [flushPending, onFinalized]);
+  }, [flushPending, onFinalized, onTerminated]);
 
   // Submitting is never optimistic: the completion screen appears only once the
   // server has reported a terminal status. `finalizeAttempt` is a conditional
@@ -212,6 +223,11 @@ export function SubmitDialog({
 
       if (result.kind === "finalized") {
         onFinalized(result.status);
+        return;
+      }
+
+      if (result.kind === "terminated") {
+        onTerminated();
         return;
       }
     } catch {

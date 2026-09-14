@@ -13,6 +13,7 @@ const TONE: Record<AttemptStatus, StatusTone> = {
   in_progress: "info",
   submitted: "success",
   auto_submitted: "warning",
+  terminated: "danger",
 };
 
 export function AttemptStatusBadge({

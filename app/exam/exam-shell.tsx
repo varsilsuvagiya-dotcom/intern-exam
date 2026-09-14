@@ -11,7 +11,9 @@ import type { TimingState } from "@/lib/exam/exam-timer";
 import { ExamButton } from "@/components/exam/button";
 import { ExamBanner } from "@/components/exam/surface";
 
+import { AntiCheatingMonitor } from "./anti-cheating-monitor";
 import { CompletionScreen } from "./completion-screen";
+import { TerminationScreen } from "./termination-screen";
 import { ExamHeader } from "./exam-header";
 import { lessonPosition } from "./lesson-panel";
 import { ExamTimerDisplay, type StopReason } from "./exam-timer-display";
@@ -79,6 +81,10 @@ export function ExamShell({
   );
 
   const [finalStatus, setFinalStatus] = useState<TerminalStatus | null>(null);
+  /// Set once the anti-cheating limit ends the attempt. Checked ahead of
+  /// finalStatus below: a terminated attempt shows its own screen and never
+  /// the ordinary completion screen, whichever happened to be set first.
+  const [terminated, setTerminated] = useState(false);
   /// True once an automatic submission has been refused or has failed at least
   /// once and the loop below is still trying. It only changes what the banner
   /// says; the retry itself is unchanged.
@@ -123,6 +129,11 @@ export function ExamShell({
 
           if (result.kind === "finalized") {
             setFinalStatus(result.status);
+            return;
+          }
+
+          if (result.kind === "terminated") {
+            setTerminated(true);
             return;
           }
 
@@ -233,6 +244,10 @@ export function ExamShell({
     );
   };
 
+  if (terminated) {
+    return <TerminationScreen />;
+  }
+
   if (finalStatus) {
     return <CompletionScreen status={finalStatus} />;
   }
@@ -246,7 +261,9 @@ export function ExamShell({
     // fallback beside it: both compile to `height`, so which one won would come
     // down to Tailwind's output order rather than intent, and `dvh` is
     // supported by every browser this examination is sat in.
-    <div className="relative flex h-dvh flex-col overflow-hidden">
+    <div className="relative flex h-dvh flex-col overflow-hidden select-none [&_input]:select-text [&_textarea]:select-text">
+      <AntiCheatingMonitor onTerminated={() => setTerminated(true)} />
+
       {/* Faint tiled brand mark across the exam screen, for authenticity and
           as a light deterrent against screenshots leaving the paper unmarked.
           Purely decorative: `aria-hidden`, no pointer events, and behind
@@ -276,7 +293,12 @@ export function ExamShell({
         saveStatus={status}
         timer={<ExamTimerDisplay initial={initialTiming} onExpire={handleExpired} />}
         submit={
-          <SubmitDialog disabled={expired} flushPending={flush} onFinalized={setFinalStatus} />
+          <SubmitDialog
+            disabled={expired}
+            flushPending={flush}
+            onFinalized={setFinalStatus}
+            onTerminated={() => setTerminated(true)}
+          />
         }
       />
 
