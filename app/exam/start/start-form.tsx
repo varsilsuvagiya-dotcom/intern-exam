@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState, type FormEvent } from "react";
 import { ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 
 import { examButtonClass, ExamButton } from "@/components/exam/button";
@@ -21,10 +21,26 @@ export function StartForm({ className = "" }: { className?: string }) {
     kind: "idle",
   });
 
+  // Native `required` validation shows a browser tooltip, not the same
+  // below-field red text the server errors use. Checked on submit instead so
+  // both paths render identically; `noValidate` on the form suppresses the tooltip.
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+
   const errorFor = (field: string): string | undefined =>
-    state.kind === "invalid"
+    clientErrors[field] ??
+    (state.kind === "invalid"
       ? state.errors.find((error) => error.field === field)?.message
-      : undefined;
+      : undefined);
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const formData = new FormData(event.currentTarget);
+    const next: Record<string, string> = {};
+    if (!String(formData.get("name") ?? "").trim()) next.name = "Full name is required.";
+    if (!String(formData.get("email") ?? "").trim()) next.email = "Email is required.";
+    if (!String(formData.get("mobile") ?? "").trim()) next.mobile = "Mobile number is required.";
+    setClientErrors(next);
+    if (Object.keys(next).length > 0) event.preventDefault();
+  };
 
   // Verified and ready to enter. The resume wording is driven by the server's
   // own `resumed` flag — the page never guesses whether an attempt exists.
@@ -82,7 +98,7 @@ export function StartForm({ className = "" }: { className?: string }) {
         Your details
       </h2>
 
-      <form action={start} className="flex flex-col gap-5 px-5 py-5">
+      <form action={start} onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 px-5 py-5">
         <ExamField id="candidate-name" label="Full name" error={errorFor("name")}>
           {(field) => (
             <ExamInput
