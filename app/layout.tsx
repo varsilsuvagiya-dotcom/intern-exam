@@ -19,6 +19,17 @@ export const metadata: Metadata = {
   },
   description: "CloudUS Online Examination System",
   applicationName: "CloudUS",
+  openGraph: {
+    title: "CloudUS",
+    description: "CloudUS Online Examination System",
+    images: ["/cloudus-logo.png"],
+  },
+  twitter: {
+    card: "summary",
+    title: "CloudUS",
+    description: "CloudUS Online Examination System",
+    images: ["/cloudus-logo.png"],
+  },
 };
 
 export const viewport: Viewport = {
