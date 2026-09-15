@@ -185,6 +185,15 @@ export function AntiCheatingMonitor({
       event.preventDefault();
     };
 
+    // Middle-click (mouse wheel button), which opens a link in a new tab in
+    // most browsers. Blocked but not reported, same reasoning as the other
+    // clipboard/navigation shortcuts above.
+    const onAuxClick = (event: MouseEvent) => {
+      if (event.button === 1) {
+        event.preventDefault();
+      }
+    };
+
     const onBeforePrint = () => {};
 
     // Keyboard shortcuts. Only the combinations named in scope are
@@ -270,6 +279,7 @@ export function AntiCheatingMonitor({
     document.addEventListener("paste", onPaste);
     document.addEventListener("dragstart", onDragStart);
     document.addEventListener("drop", onDrop);
+    document.addEventListener("auxclick", onAuxClick);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("beforeprint", onBeforePrint);
 
@@ -280,6 +290,7 @@ export function AntiCheatingMonitor({
       document.removeEventListener("paste", onPaste);
       document.removeEventListener("dragstart", onDragStart);
       document.removeEventListener("drop", onDrop);
+      document.removeEventListener("auxclick", onAuxClick);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeprint", onBeforePrint);
     };
