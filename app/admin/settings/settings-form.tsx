@@ -136,8 +136,6 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
     return { tone: "success", message: "Settings saved." };
   });
 
-  const open = status === "open";
-
   // Presentational only: the server is the authority on whether the mix is
   // valid. This just lets the admin see the running total while typing.
   const values = [percents.easyPercent, percents.mediumPercent, percents.hardPercent].map((raw) =>
@@ -164,12 +162,14 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
         title="Exam availability"
         description="Whether candidates can start a new attempt. Attempts already in progress are not affected."
       >
-        {/* The current state is stated in words and badged, so it reads at a
-            glance rather than only from the select's value. */}
+        {/* Reflects the saved value, not the pending select choice — the
+            badge must not claim a state that hasn't been saved yet. */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Badge tone={open ? "success" : "neutral"}>{open ? "Exam is open" : "Exam is closed"}</Badge>
+          <Badge tone={settings.isOpen ? "success" : "neutral"}>
+            {settings.isOpen ? "Exam is open" : "Exam is closed"}
+          </Badge>
           <span className="text-[13px] text-muted">
-            {open
+            {settings.isOpen
               ? "Candidates can start a new attempt."
               : "Candidates cannot start a new attempt."}
           </span>
@@ -202,7 +202,7 @@ export function SettingsForm({ settings }: { settings: EditableSettings }) {
 
         {/* Explanatory only. Opening or closing takes effect when saved, which
             is the existing behaviour; nothing new is enforced here. */}
-        <p className="mt-3 text-[13px] text-muted">
+        <p className="mt-3 text-[13px] text-warning">
           The change takes effect when you save.
         </p>
       </Group>
