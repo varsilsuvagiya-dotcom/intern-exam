@@ -237,6 +237,25 @@ export function AntiCheatingMonitor({
         return;
       }
 
+      // Find-on-page is blocked but not reported, same reasoning as print/save:
+      // reflexive, not itself proof of anything.
+      if (meta && key === "f") {
+        event.preventDefault();
+        return;
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab (switch to next/previous tab). Best-effort
+      // only: unlike the shortcuts above, most browsers manage tab-switching
+      // at a level `preventDefault()` does not reach, so this can be a no-op
+      // depending on browser/OS. Kept anyway since it costs nothing and does
+      // work in some browsers; Alt+Tab and Win+Tab are OS window-switchers
+      // with no browser involvement at all and are not attempted here — see
+      // docs/security/locked-examination-environment.md for why.
+      if (meta && key === "tab") {
+        event.preventDefault();
+        return;
+      }
+
       // Blocked but not reported, same as the clipboard events above: these
       // are the shortcut form of copy/cut/paste/select-all, not a distinct
       // signal worth spending the violation budget on.
