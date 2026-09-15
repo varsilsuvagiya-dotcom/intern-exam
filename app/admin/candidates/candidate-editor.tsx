@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import Link from "next/link";
-import { CheckSquare, Pencil, Plus, Upload } from "lucide-react";
+import { CheckSquare, Download, Pencil, Plus, Upload } from "lucide-react";
 
 import { Button, buttonClass } from "@/components/ui/button";
 
@@ -40,7 +40,7 @@ export function CandidateEditor({ children }: { children: ReactNode }) {
             onClick={() => setImportOpen(true)}
             icon={<Upload aria-hidden="true" className="size-4" />}
           >
-            Import CSV
+            Import candidates
           </Button>
 
           <Button
@@ -51,6 +51,17 @@ export function CandidateEditor({ children }: { children: ReactNode }) {
           >
             Import Selected Candidates
           </Button>
+
+          {/* A plain link, not a fetch: the route sets Content-Disposition, so
+              the browser downloads it without any client-side file handling. */}
+          <a
+            href="/admin/candidates/template"
+            download
+            className={buttonClass("secondary")}
+          >
+            <Download aria-hidden="true" className="size-4" />
+            Download template
+          </a>
         </div>
 
         {addOpen ? (

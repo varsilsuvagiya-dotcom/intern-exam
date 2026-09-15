@@ -35,7 +35,6 @@ export function StartForm({ className = "" }: { className?: string }) {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     const formData = new FormData(event.currentTarget);
     const next: Record<string, string> = {};
-    if (!String(formData.get("name") ?? "").trim()) next.name = "Full name is required.";
     if (!String(formData.get("email") ?? "").trim()) next.email = "Email is required.";
     if (!String(formData.get("mobile") ?? "").trim()) next.mobile = "Mobile number is required.";
     setClientErrors(next);
@@ -99,19 +98,9 @@ export function StartForm({ className = "" }: { className?: string }) {
       </h2>
 
       <form action={start} onSubmit={handleSubmit} noValidate className="flex flex-col gap-5 px-5 py-5">
-        <ExamField id="candidate-name" label="Full name" error={errorFor("name")}>
-          {(field) => (
-            <ExamInput
-              {...field}
-              name="name"
-              maxLength={200}
-              required
-              autoComplete="name"
-              autoCapitalize="words"
-            />
-          )}
-        </ExamField>
-
+        {/* No name field: the candidate is identified by email or mobile
+            alone (lib/exam/start-exam.ts), so asking for a name collected
+            nothing the exam acts on. */}
         <ExamField id="candidate-email" label="Email" error={errorFor("email")}>
           {(field) => (
             <ExamInput

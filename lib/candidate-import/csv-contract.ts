@@ -97,6 +97,70 @@ export function isSupportedColumn(normalized: string): normalized is CandidateCo
   return SUPPORTED.has(normalized);
 }
 
+/// The exact header row an upload must carry, in sheet order, as the live
+/// sheet spells it — the human-readable counterpart to `CANDIDATE_COLUMNS`
+/// above, which holds the same columns normalized for matching. Served as the
+/// downloadable template (app/admin/candidates/template/route.ts) so an admin
+/// can start from a file the importer is guaranteed to accept. The ignored
+/// columns ("Email address", "Column 24", "Column 25") are deliberately left
+/// out: the importer never reads them, so a template should not suggest them.
+export const TEMPLATE_HEADERS = [
+  "Timestamp",
+  "Full Name",
+  "Mobile Number (WhatsApp)",
+  CANONICAL_EMAIL_HEADER,
+  "Current City",
+  "Are you willing to work full-time from our Surat office?",
+  "Date of Birth",
+  "Highest Qualification",
+  "College / Institute Name",
+  "Year of Passing / Expected Passing",
+  "CGPA or Percentage",
+  "Which technologies have you worked with?",
+  "Have you built any project?",
+  "Describe your best project in your own words.",
+  "GitHub profile link",
+  "LinkedIn profile link",
+  "Any live project link",
+  "Tell us about one thing you learned on your own, outside college. How did you learn it?",
+  "Which AI tools have you used?",
+  "Why do you want to join this training program?",
+  "Paste a link to your resume (Google Drive / PDF link)",
+  "I have read and understood all the above terms, and I agree to them.",
+  "I confirm that all information provided in this form is true and correct.",
+  "Where did you hear about this training program?",
+] as const;
+
+/// One filled row, so the template shows the expected shape of each column
+/// (date formats especially) rather than only its name.
+export const TEMPLATE_EXAMPLE_ROW: Record<string, string> = {
+  Timestamp: "7/30/2026 17:53:40",
+  "Full Name": "Example Candidate",
+  "Mobile Number (WhatsApp)": "9876543210",
+  [CANONICAL_EMAIL_HEADER]: "example@gmail.com",
+  "Current City": "Surat",
+  "Are you willing to work full-time from our Surat office?": "Yes",
+  "Date of Birth": "5/23/05",
+  "Highest Qualification": "B.E. / B.Tech",
+  "College / Institute Name": "Example Institute of Technology",
+  "Year of Passing / Expected Passing": "2026",
+  "CGPA or Percentage": "8.73",
+  "Which technologies have you worked with?": "JavaScript, React / Next.js, Python",
+  "Have you built any project?": "Yes — college project",
+  "Describe your best project in your own words.": "A short description of the project.",
+  "GitHub profile link": "https://github.com/example",
+  "LinkedIn profile link": "https://www.linkedin.com/in/example",
+  "Any live project link": "https://example.com",
+  "Tell us about one thing you learned on your own, outside college. How did you learn it?":
+    "Learned Next.js from the official docs and by building a small app.",
+  "Which AI tools have you used?": "ChatGPT, Claude, GitHub Copilot",
+  "Why do you want to join this training program?": "To work on real projects with a team.",
+  "Paste a link to your resume (Google Drive / PDF link)": "https://drive.google.com/file/d/example",
+  "I have read and understood all the above terms, and I agree to them.": "I agree",
+  "I confirm that all information provided in this form is true and correct.": "I confirm",
+  "Where did you hear about this training program?": "LinkedIn",
+};
+
 export const ACCEPTED_EXTENSIONS = [".csv", ".xlsx"] as const;
 
 /// Conservative limits for a live candidate file. The sheet audited in Phase 12

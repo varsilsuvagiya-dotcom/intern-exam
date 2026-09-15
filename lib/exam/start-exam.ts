@@ -7,7 +7,6 @@ import { normalizeMobile } from "@/lib/integrations/candidate-payload";
 import { createExamSession } from "./exam-session";
 import { ensureExamPaper } from "./paper-generation";
 
-const MAX_NAME = 200;
 const MAX_EMAIL = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -27,11 +26,10 @@ export type StartOutcome =
   | { kind: "invalid"; errors: { field: string; message: string }[] }
   | { kind: "failed" };
 
-export type StartInput = { name: string; email: string; mobile: string };
+export type StartInput = { email: string; mobile: string };
 
 function readInput(form: FormData): StartInput {
   return {
-    name: String(form.get("name") ?? "").trim(),
     email: String(form.get("email") ?? "").trim().toLowerCase(),
     mobile: String(form.get("mobile") ?? "").trim(),
   };
@@ -127,17 +125,11 @@ function isUniqueViolation(error: unknown): boolean {
 ///
 /// Every decision is made here from server state: the exam's open flag, the
 /// candidate looked up by mobile, and that candidate's existing attempts. The
-/// browser supplies only the three typed fields — never a candidate id, an
+/// browser supplies only the two typed fields — never a candidate id, an
 /// attempt id, or a start time.
 export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
   const input = readInput(form);
   const errors: { field: string; message: string }[] = [];
-
-  if (!input.name) {
-    errors.push({ field: "name", message: "Full name is required." });
-  } else if (input.name.length > MAX_NAME) {
-    errors.push({ field: "name", message: "Full name is too long." });
-  }
 
   if (!input.email) {
     errors.push({ field: "email", message: "Email is required." });
@@ -155,14 +147,11 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
   // Same normalization the Google Apps Script sync uses, so a number stored from
   // the application form matches whatever formatting the candidate types here.
+  //
+  // A number this rejects is no longer fatal on its own: the email below can
+  // still identify the candidate, so a malformed mobile simply contributes no
+  // match instead of ending the start.
   const mobile = normalizeMobile(input.mobile);
-
-  if (!mobile) {
-    // A malformed number cannot match any application record. Reported as
-    // ineligible rather than as a format error, so the response is identical
-    // whether or not the number exists.
-    return { kind: "ineligible" };
-  }
 
   // Checked immediately before the write, not at page render: an admin may have
   // closed the exam while the candidate sat on the form.
@@ -170,10 +159,28 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
     return { kind: "closed" };
   }
 
-  // Mobile is the identity key. The typed name and email are recorded on the
-  // attempt but never used to find the candidate.
+  // Mobile *or* email identifies the candidate — either one matching an
+  // application record is enough to proceed, per the business rule that a
+  // candidate who mistypes one of the two should not be locked out of their
+  // own exam.
+  //
+  // This is deliberately weaker than the previous mobile-only rule: whoever
+  // knows either a selected candidate's number or their email address can
+  // start that candidate's exam. There is no OTP or password behind it, so
+  // the selection list (CandidateExam, checked below) remains the only real
+  // gate.
+  //
+  // Email is compared lowercased because `readInput` lowercases it, and
+  // `mode: "insensitive"` makes a record stored with different casing match
+  // anyway. A null `mobile` (normalization rejected it) contributes no clause
+  // rather than an `undefined` filter that would match every row.
   const candidate = await prisma.candidate.findFirst({
-    where: { mobile },
+    where: {
+      OR: [
+        ...(mobile ? [{ mobile }] : []),
+        { email: { equals: input.email, mode: "insensitive" as const } },
+      ],
+    },
     select: { id: true },
     orderBy: { registeredAt: "asc" },
   });
@@ -228,9 +235,12 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
     // startedAt and status come from the schema defaults, so neither can be set
     // by the request.
     const attempt = await prisma.attempt.create({
+      // `enteredName` is left null: the form no longer asks for a name, so
+      // there is nothing typed to record. Every reader of it already handles
+      // null (see lib/admin/attempt-result.ts and lib/exam/candidate-paper.ts),
+      // and the candidate's real name still comes from the Candidate row.
       data: {
         candidateId: candidate.id,
-        enteredName: input.name,
         enteredEmail: input.email,
       },
       select: { id: true },

@@ -37,7 +37,7 @@ export async function importCandidatesFromCsv(
   if (!(file instanceof File)) {
     return {
       stage: "invalid",
-      errors: [{ row: 0, field: "file", message: "Choose a CSV file to upload." }],
+      errors: [{ row: 0, field: "file", message: "Choose a CSV or Excel (.xlsx) file to upload." }],
     };
   }
 

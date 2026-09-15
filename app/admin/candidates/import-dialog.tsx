@@ -307,7 +307,7 @@ function ImportCandidatesForm({
       onClose={handleClose}
       preventClose={importing}
       title="Import candidates"
-      description="Import candidate data from the live candidate CSV."
+      description="Import candidate data from the live candidate sheet (CSV or Excel)."
     >
       {!showResult && !showInvalid ? (
         <div className="space-y-4">
