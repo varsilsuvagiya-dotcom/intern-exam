@@ -179,7 +179,7 @@ function ToastCard({
         }
       }}
       className={[
-        "pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden",
+        "pointer-events-auto relative flex w-full items-center gap-3 overflow-hidden",
         "rounded-md border border-line bg-surface py-3 pl-4 pr-2 shadow-lg",
         "md:w-auto md:min-w-[280px] md:max-w-[400px]",
         "motion-safe:animate-[toast-in_180ms_ease-out]",
@@ -189,7 +189,7 @@ function ToastCard({
           which keeps toasts visually distinct from inline alerts. */}
       <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-[3px] ${accent}`} />
 
-      <Icon aria-hidden="true" className={`mt-0.5 size-4 shrink-0 ${fg}`} />
+      <Icon aria-hidden="true" className={`size-4 shrink-0 ${fg}`} />
 
       <div className="min-w-0 flex-1 text-sm text-ink">
         <p className="font-medium">
