@@ -123,6 +123,13 @@ export function SearchField({
           className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted"
         />
         <Input
+          // Uncontrolled input: `defaultValue` only applies on mount, so
+          // without a key tied to the value itself, clicking "Reset" (a
+          // navigation to the same pathname with no query) leaves the field
+          // showing whatever the admin last typed instead of clearing it —
+          // React reuses the existing DOM node rather than remounting it.
+          // Keying on the value forces a remount whenever it actually changes.
+          key={defaultValue}
           id={id}
           type="search"
           name={name}
@@ -152,7 +159,14 @@ export function SelectField({
 }) {
   return (
     <FilterField label={label} htmlFor={id} className={className}>
-      <ThemeSelect id={id} name={name} value={value} options={options} />
+      {/* ThemeSelect tracks its own "chosen" state once the admin picks an
+          option, the same uncontrolled-like behavior SearchField's input
+          has — so without a key tied to the value, "Reset" (a navigation to
+          the same pathname with a different/absent query) would leave a
+          previously-chosen option showing instead of the server's fresh
+          `value`. Keying forces a remount whenever the value actually
+          changes, e.g. after Reset. */}
+      <ThemeSelect key={value} id={id} name={name} value={value} options={options} />
     </FilterField>
   );
 }

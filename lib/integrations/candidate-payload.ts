@@ -17,6 +17,8 @@ const MAX_EMAIL = 320;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const MOBILE_PATTERN = /^[6-9]\d{9}$/;
+
 /// Candidates are hired locally and the application form collects Indian
 /// mobile numbers, so a valid number is 10 digits starting 6-9. Normalization
 /// only removes formatting a spreadsheet may introduce — spaces, hyphens,
@@ -24,11 +26,25 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /// does not then look like a real 10-digit number is rejected rather than
 /// guessed at, so a candidate's actual number is never silently rewritten into
 /// a different one.
+///
+/// The prefix is stripped only when the number is already too long to be a
+/// bare 10-digit number (11+ digits after removing formatting): many real
+/// numbers legitimately start with "91" as their own first two digits (e.g.
+/// 9157571942), and blindly stripping a leading "91"/"0" from an
+/// already-10-digit number would corrupt it into 8 garbage digits.
 export function normalizeMobile(raw: string): string | null {
   const cleaned = raw.replace(/[\s\-().]/g, "");
-  const withoutPrefix = cleaned.replace(/^(?:\+91|91|0)/, "");
 
-  return /^[6-9]\d{9}$/.test(withoutPrefix) ? withoutPrefix : null;
+  if (MOBILE_PATTERN.test(cleaned)) {
+    return cleaned;
+  }
+
+  if (cleaned.length <= 10) {
+    return null;
+  }
+
+  const withoutPrefix = cleaned.replace(/^(?:\+91|91|0)/, "");
+  return MOBILE_PATTERN.test(withoutPrefix) ? withoutPrefix : null;
 }
 
 /// A candidate entered by an administrator rather than synchronized.

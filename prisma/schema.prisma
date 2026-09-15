@@ -59,7 +59,7 @@ enum ViolationType {
 /// Question bank. `id` is the stable identifier carried in from the CSV, so
 /// re-importing a row updates it in place instead of creating a duplicate.
 model Question {
-  id              String         @id
+  id              String     @id
   /// The canonical section code, and only ever one of the seven the exam
   /// blueprint defines: LOG, NUM, JS, OUT, BUG, STP or LRN. The set of valid
   /// values is the blueprint's, enforced by the importer and the admin editor
@@ -70,34 +70,34 @@ model Question {
   topic           String
   difficulty      Difficulty
   question        String
-  codeBlock       String?        @map("code_block")
+  codeBlock       String?    @map("code_block")
   /// Admin/internal verification reference. Never sent to a candidate: it is
   /// absent from the candidate paper's select list and from CandidateQuestion.
-  verifyCode      String?        @map("verify_code")
-  optionA         String         @map("option_a")
-  optionB         String         @map("option_b")
-  optionC         String         @map("option_c")
-  optionD         String         @map("option_d")
+  verifyCode      String?    @map("verify_code")
+  optionA         String     @map("option_a")
+  optionB         String     @map("option_b")
+  optionC         String     @map("option_c")
+  optionD         String     @map("option_d")
   correct         OptionKey
   explanation     String?
   /// Section 7 only: the lesson shown above all 3 questions of its group.
-  lessonText      String?        @map("lesson_text")
+  lessonText      String?    @map("lesson_text")
   /// Section 7 only: groups the 3 questions that share one lesson.
-  lessonGroup     String?        @map("lesson_group")
+  lessonGroup     String?    @map("lesson_group")
   /// Every active section is scored, so this is true for every question the
   /// current exam can draw. It is retained because AttemptQuestion snapshots a
   /// copy of it, and historical scoring reads that snapshot.
-  scored          Boolean        @default(true)
-  marks           Decimal        @db.Decimal(4, 2)
-  aiVerified      Boolean        @default(false) @map("ai_verified")
-  trainerVerified Boolean        @default(false) @map("trainer_verified")
+  scored          Boolean    @default(true)
+  marks           Decimal    @db.Decimal(4, 2)
+  aiVerified      Boolean    @default(false) @map("ai_verified")
+  trainerVerified Boolean    @default(false) @map("trainer_verified")
   /// Whether the question is eligible to be drawn into a newly generated
   /// paper. The only state a question has beyond its content: active or not.
   /// A freshly imported question always starts inactive — activation is a
   /// deliberate administrative act, never a side effect of import.
-  isActive        Boolean        @default(false) @map("is_active")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
+  isActive        Boolean    @default(false) @map("is_active")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
 
   attemptQuestions AttemptQuestion[]
 
@@ -115,64 +115,138 @@ model Candidate {
   /// Set by the Google Apps Script sync; makes re-sending a registration idempotent.
   googleFormResponseId String?  @unique @map("google_form_response_id")
   registeredAt         DateTime @default(now()) @map("registered_at")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
 
-  attempts Attempt[]
+  // --- Live-sheet application/profile fields (Phase 12) ---------------------
+  // Added for the upcoming candidate-CSV import (Phase 13). All nullable: an
+  // existing candidate synced from the Google Form, or added by hand, carries
+  // none of this and must remain valid without a backfill. Field-by-field
+  // mapping from the spreadsheet is documented in
+  // docs/candidate-import-field-mapping.md.
+  //
+  /// The row's timestamp on the source live sheet — distinct from `createdAt`,
+  /// which is when this database row was written and may be much later (e.g.
+  /// a bulk import run).
+  sourceTimestamp         DateTime? @map("source_timestamp")
+  currentCity             String?   @map("current_city")
+  /// Free text on the sheet ("Yes" / "No" / other) rather than a clean
+  /// boolean, so an inconsistent answer cannot fail the import.
+  willingFullTimeSurat    String?   @map("willing_full_time_surat")
+  dateOfBirth             DateTime? @map("date_of_birth") @db.Date
+  highestQualification    String?   @map("highest_qualification")
+  collegeName             String?   @map("college_name")
+  yearOfPassing           String?   @map("year_of_passing")
+  /// Free text ("8.5 CGPA", "75%", "N/A") — kept as-is rather than parsed to a
+  /// number, since the sheet mixes formats.
+  cgpaOrPercentage        String?   @map("cgpa_or_percentage")
+  technologies            String?   @map("technologies") @db.Text
+  projectInfo             String?   @map("project_info") @db.Text
+  githubUrl               String?   @map("github_url")
+  linkedinUrl             String?   @map("linkedin_url")
+  liveProjectUrl          String?   @map("live_project_url")
+  selfLearningInfo        String?   @map("self_learning_info") @db.Text
+  aiToolsInfo             String?   @map("ai_tools_info") @db.Text
+  reasonForJoining        String?   @map("reason_for_joining") @db.Text
+  resumeUrl               String?   @map("resume_url")
+  /// Free text on the sheet, same reasoning as `willingFullTimeSurat`.
+  termsAgreement          String?   @map("terms_agreement")
+  informationConfirmation String?   @map("information_confirmation")
+  hearAboutProgram        String?   @map("hear_about_program")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  attempts       Attempt[]
+  candidateExams CandidateExam[]
 
   @@index([mobile])
   @@index([email])
   @@map("candidates")
 }
 
+/// "Is this candidate selected/eligible for this particular exam?" — separate
+/// from Candidate, which only answers who the candidate is and what they
+/// applied with. A candidate can exist without ever having a CandidateExam
+/// row; existing/manual candidates today have none, and that must not make
+/// them ineligible for anything that starts checking this table later.
+///
+/// A row's mere existence means "selected" — no INELIGIBLE state, since
+/// nothing today needs to represent an explicit negative selection; add one
+/// only when a real workflow needs it.
+///
+/// `examId` targets ExamSetting.id rather than a separate Exam model: the
+/// codebase has no Exam model, only the ExamSetting singleton (id always
+/// "singleton"). This keeps the relation correct today and forward-compatible
+/// if ExamSetting is ever split into multiple rows.
+model CandidateExam {
+  id          String              @id @default(uuid())
+  candidateId String              @map("candidate_id")
+  examId      String              @map("exam_id")
+  status      CandidateExamStatus @default(SELECTED)
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  candidate Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  exam      ExamSetting @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  // Prevents the same selected-candidate file from creating a duplicate
+  // eligibility row when imported more than once.
+  @@unique([candidateId, examId])
+  @@index([examId])
+  @@map("candidate_exams")
+}
+
+enum CandidateExamStatus {
+  SELECTED
+}
+
 model Attempt {
-  id              String        @id @default(uuid())
-  candidateId     String        @map("candidate_id")
-  startedAt       DateTime      @default(now()) @map("started_at")
-  submittedAt     DateTime?     @map("submitted_at")
+  id                  String             @id @default(uuid())
+  candidateId         String             @map("candidate_id")
+  startedAt           DateTime           @default(now()) @map("started_at")
+  submittedAt         DateTime?          @map("submitted_at")
   /// Wall-clock seconds the candidate actually spent; filled in on submission.
-  durationSeconds Int?          @map("duration_seconds")
+  durationSeconds     Int?               @map("duration_seconds")
   /// Null until scoring has run. Scoring only ever runs on a finalized attempt,
   /// and always recomputes the whole total from the stored paper and answers.
-  totalScore      Decimal?      @map("total_score") @db.Decimal(5, 2)
-  section1Score   Decimal?      @map("section_1_score") @db.Decimal(5, 2)
-  section2Score   Decimal?      @map("section_2_score") @db.Decimal(5, 2)
-  section3Score   Decimal?      @map("section_3_score") @db.Decimal(5, 2)
-  section4Score   Decimal?      @map("section_4_score") @db.Decimal(5, 2)
-  section5Score   Decimal?      @map("section_5_score") @db.Decimal(5, 2)
-  section6Score   Decimal?      @map("section_6_score") @db.Decimal(5, 2)
-  section7Score   Decimal?      @map("section_7_score") @db.Decimal(5, 2)
+  totalScore          Decimal?           @map("total_score") @db.Decimal(5, 2)
+  section1Score       Decimal?           @map("section_1_score") @db.Decimal(5, 2)
+  section2Score       Decimal?           @map("section_2_score") @db.Decimal(5, 2)
+  section3Score       Decimal?           @map("section_3_score") @db.Decimal(5, 2)
+  section4Score       Decimal?           @map("section_4_score") @db.Decimal(5, 2)
+  section5Score       Decimal?           @map("section_5_score") @db.Decimal(5, 2)
+  section6Score       Decimal?           @map("section_6_score") @db.Decimal(5, 2)
+  section7Score       Decimal?           @map("section_7_score") @db.Decimal(5, 2)
   /// Always 0: section 8 is stored but never scored. Kept as a column so the
   /// admin result view can render all eight sections from one row.
-  section8Score   Decimal?      @map("section_8_score") @db.Decimal(5, 2)
-  scoredAt        DateTime?     @map("scored_at")
-  status          AttemptStatus @default(in_progress)
+  section8Score       Decimal?           @map("section_8_score") @db.Decimal(5, 2)
+  scoredAt            DateTime?          @map("scored_at")
+  status              AttemptStatus      @default(in_progress)
   /// What the candidate typed on the start screen. Recorded here rather than
   /// written back to Candidate, because the Google Form record is the
   /// authoritative application data; keeping both lets an admin spot a
   /// candidate who entered a different name or email than they applied with.
-  enteredName     String?       @map("entered_name")
-  enteredEmail    String?       @map("entered_email")
+  enteredName         String?            @map("entered_name")
+  enteredEmail        String?            @map("entered_email")
   /// Where the candidate was working, as an AttemptQuestion.displayOrder within
   /// this attempt's own paper — not a Question id, which says nothing about
   /// display order once the paper is shuffled. Null on an attempt that has not
   /// reported a position yet, which is every attempt created before this
   /// column existed; resume then opens at the first question as it always did.
-  currentDisplayOrder Int?      @map("current_display_order")
+  currentDisplayOrder Int?               @map("current_display_order")
   /// Monotonic counter supplied by the browser with each position report. A
   /// report is only applied if it is newer than the stored one, so a slow write
   /// for question 20 landing after a fast write for question 23 cannot drag the
   /// candidate backwards. Visited state needs no equivalent: it is set-once per
   /// row and therefore cannot lose an earlier visit.
-  currentPositionSeq  Int       @default(0) @map("current_position_seq")
+  currentPositionSeq  Int                @default(0) @map("current_position_seq")
   /// Server-authoritative count of recorded ExamViolation rows. Mirrors
   /// ExamViolation's count for this attempt; kept as a denormalized counter so
   /// the limit check does not require a count(*) on every violation.
-  violationCount  Int           @default(0) @map("violation_count")
+  violationCount      Int                @default(0) @map("violation_count")
   /// Set only when status is `terminated`.
-  terminationReason TerminationReason? @map("termination_reason")
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  terminationReason   TerminationReason? @map("termination_reason")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
 
   candidate        Candidate         @relation(fields: [candidateId], references: [id], onDelete: Restrict)
   attemptQuestions AttemptQuestion[]
@@ -290,24 +364,26 @@ model Answer {
 /// constraint in the migration rejects any other, so a second configuration
 /// cannot be created even by accident.
 model ExamSetting {
-  id              String   @id @default("singleton")
-  examName        String   @map("exam_name")
-  durationMinutes Int      @map("duration_minutes")
+  id                        String   @id @default("singleton")
+  examName                  String   @map("exam_name")
+  durationMinutes           Int      @map("duration_minutes")
   /// Closed by default so a fresh deployment can never accidentally admit
   /// candidates before an admin opens the exam.
-  isOpen          Boolean  @default(false) @map("is_open")
+  isOpen                    Boolean  @default(false) @map("is_open")
   /// Target difficulty mix for a drawn paper, as whole percentages summing to
   /// 100. Unlike the section counts, this is genuinely tunable, so the
   /// requirements call for it to be admin-editable.
-  easyPercent     Int      @default(40) @map("easy_percent")
-  mediumPercent   Int      @default(40) @map("medium_percent")
-  hardPercent     Int      @default(20) @map("hard_percent")
+  easyPercent               Int      @default(40) @map("easy_percent")
+  mediumPercent             Int      @default(40) @map("medium_percent")
+  hardPercent               Int      @default(20) @map("hard_percent")
   /// Number of recorded violations a single attempt may reach before it is
   /// automatically terminated. Not a UI constant: the anti-cheating layer
   /// always reads this rather than a hardcoded number.
-  unauthorizedActivityLimit Int @default(3) @map("unauthorized_activity_limit")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  unauthorizedActivityLimit Int      @default(3) @map("unauthorized_activity_limit")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  candidateExams CandidateExam[]
 
   @@map("exam_settings")
 }

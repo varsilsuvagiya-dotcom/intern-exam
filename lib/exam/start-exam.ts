@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { getExamSettings } from "@/lib/exam-settings";
+import { getExamSettings, SETTINGS_ID } from "@/lib/exam-settings";
 import { normalizeMobile } from "@/lib/integrations/candidate-payload";
 
 import { createExamSession } from "./exam-session";
@@ -15,6 +15,14 @@ export type StartOutcome =
   | { kind: "started"; resumed: boolean }
   | { kind: "closed" }
   | { kind: "ineligible" }
+  /// The candidate was found by mobile, but has no CandidateExam record for
+  /// the current exam (lib/exam-settings's SETTINGS_ID) — the Selected
+  /// Candidates import (Phase 15/16) never created one for them. Kept
+  /// distinct from `ineligible` (which also covers "no such candidate at
+  /// all") because the brief requires the UI to tell the two apart, even
+  /// though that necessarily reveals slightly more than `ineligible` does —
+  /// see the comment on the eligibility check itself for the reasoning.
+  | { kind: "not_selected" }
   | { kind: "completed" }
   | { kind: "invalid"; errors: { field: string; message: string }[] }
   | { kind: "failed" };
@@ -162,7 +170,7 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
     return { kind: "closed" };
   }
 
-  // Mobile is the eligibility key. The typed name and email are recorded on the
+  // Mobile is the identity key. The typed name and email are recorded on the
   // attempt but never used to find the candidate.
   const candidate = await prisma.candidate.findFirst({
     where: { mobile },
@@ -172,6 +180,28 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
   if (!candidate) {
     return { kind: "ineligible" };
+  }
+
+  // Selection is the actual eligibility gate, checked once the candidate is
+  // identified and before any Attempt/ExamSession can be created or resumed.
+  // A CandidateExam row for the current exam (SETTINGS_ID — the same id
+  // getExamSettings() above just read) is what the Selected Candidates
+  // import (Phase 15/16) creates; its mere existence is the selection signal,
+  // so this is an existence check, not a status check.
+  //
+  // Checked before the existing-attempt lookup below: an ineligible candidate
+  // must never resume or create an attempt, so eligibility has to be settled
+  // first (brief's required ordering). A candidate who was eligible when they
+  // started but had their CandidateExam row disappear is not a real scenario
+  // this phase needs to handle — there is no deselection feature, so a row
+  // once created is never removed.
+  const selection = await prisma.candidateExam.findUnique({
+    where: { candidateId_examId: { candidateId: candidate.id, examId: SETTINGS_ID } },
+    select: { id: true },
+  });
+
+  if (!selection) {
+    return { kind: "not_selected" };
   }
 
   const existing = await prisma.attempt.findFirst({

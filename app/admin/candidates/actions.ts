@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import {
   validateManualCandidate,
   type CandidateFieldError,
@@ -19,7 +20,7 @@ export type EditCandidateState =
   | { status: "saved"; name: string }
   | { status: "error"; errors: CandidateFieldError[] };
 
-/// Reads the three candidate fields out of a submitted form.
+/// Reads the three required candidate fields out of a submitted form.
 function readCandidateFields(formData: FormData): {
   name: string;
   email: string;
@@ -31,6 +32,48 @@ function readCandidateFields(formData: FormData): {
   };
 
   return { name: read("name"), email: read("email"), mobile: read("mobile") };
+}
+
+/// The Phase 12 profile fields, all optional free text on the live sheet —
+/// same reasoning as the import pipeline: an inconsistent answer here must
+/// not block a save, so nothing beyond trimming and an empty-string-to-null
+/// conversion happens. Kept in one list so the read side (this function) and
+/// the write side (readProfileFields' callers) cannot drift on which fields
+/// exist.
+const PROFILE_TEXT_FIELDS = [
+  "currentCity",
+  "willingFullTimeSurat",
+  "highestQualification",
+  "collegeName",
+  "yearOfPassing",
+  "cgpaOrPercentage",
+  "technologies",
+  "projectInfo",
+  "githubUrl",
+  "linkedinUrl",
+  "liveProjectUrl",
+  "selfLearningInfo",
+  "aiToolsInfo",
+  "reasonForJoining",
+  "resumeUrl",
+  "termsAgreement",
+  "informationConfirmation",
+  "hearAboutProgram",
+] as const;
+
+function readProfileFields(formData: FormData): Prisma.CandidateUpdateInput {
+  const data: Prisma.CandidateUpdateInput = {};
+
+  for (const key of PROFILE_TEXT_FIELDS) {
+    const raw = formData.get(key);
+    const value = typeof raw === "string" ? raw.trim() : "";
+    (data as Record<string, string | null>)[key] = value || null;
+  }
+
+  const dobRaw = formData.get("dateOfBirth");
+  data.dateOfBirth = typeof dobRaw === "string" && dobRaw ? new Date(dobRaw) : null;
+
+  return data;
 }
 
 /// Whether some *other* candidate already holds this email or mobile.
@@ -168,7 +211,7 @@ export async function updateCandidate(
 
     await prisma.candidate.update({
       where: { id },
-      data: { name, email, mobile },
+      data: { name, email, mobile, ...readProfileFields(formData) },
       select: { id: true },
     });
   } catch (error) {

@@ -1,100 +1,87 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { Pencil, Plus } from "lucide-react";
+import Link from "next/link";
+import { CheckSquare, Pencil, Plus, Upload } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonClass } from "@/components/ui/button";
 
-import { CandidateForm, type EditableCandidate } from "./candidate-form";
+import { CandidateForm } from "./candidate-form";
+import { ImportCandidatesDialog } from "./import-dialog";
+import { SelectCandidatesDialog } from "./select-dialog";
 
-/// Which panel is open: none, the add form, or one candidate's edit form.
-type Target = { mode: "closed" } | { mode: "add" } | { mode: "edit"; candidate: EditableCandidate };
-
-const EditorContext = createContext<{
-  target: Target;
-  open: (next: Target) => void;
-} | null>(null);
-
-function useEditor() {
-  const context = useContext(EditorContext);
-
-  if (!context) {
-    throw new Error("Candidate editor controls must be rendered inside <CandidateEditor>.");
-  }
-
-  return context;
-}
-
-/// Holds which form is open, so the "Add candidate" button above the table and
-/// the "Edit" button on every row can drive one panel between them.
-///
-/// The table itself stays a server component: it is passed through as
-/// `children` and never re-rendered by this state. Only the small `EditButton`
-/// on each row is a client component, and it carries just the three fields the
-/// form needs — the page already loaded them for the row.
+/// Holds whether the "Add candidate" panel is open, plus the two import
+/// dialogs. Editing is no longer part of this state: it moved to its own
+/// route (app/admin/candidates/[id]/edit) so an edit gets a full page and a
+/// real URL rather than a panel sharing this list page's state.
 export function CandidateEditor({ children }: { children: ReactNode }) {
-  const [target, setTarget] = useState<Target>({ mode: "closed" });
-
-  const open = useCallback((next: Target) => setTarget(next), []);
-  const close = useCallback(() => setTarget({ mode: "closed" }), []);
+  const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [selectOpen, setSelectOpen] = useState(false);
 
   return (
-    <EditorContext.Provider value={{ target, open }}>
+    <>
       <div className="mb-6">
-        <Button
-          type="button"
-          variant="primary"
-          onClick={() => open(target.mode === "add" ? { mode: "closed" } : { mode: "add" })}
-          aria-expanded={target.mode === "add"}
-          icon={<Plus aria-hidden="true" className="size-4" />}
-        >
-          Add candidate
-        </Button>
-
-        {/* One panel, above the table, whichever action opened it. An edit
-            opened from a row scrolls into view rather than appearing off
-            screen on a long page. */}
-        {target.mode !== "closed" ? (
-          <div
-            className="mt-4"
-            ref={(node) => {
-              if (target.mode === "edit") {
-                node?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-              }
-            }}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => setAddOpen((value) => !value)}
+            aria-expanded={addOpen}
+            icon={<Plus aria-hidden="true" className="size-4" />}
           >
-            <CandidateForm
-              candidate={target.mode === "edit" ? target.candidate : null}
-              onClose={close}
-            />
+            Add candidate
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setImportOpen(true)}
+            icon={<Upload aria-hidden="true" className="size-4" />}
+          >
+            Import CSV
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setSelectOpen(true)}
+            icon={<CheckSquare aria-hidden="true" className="size-4" />}
+          >
+            Import Selected Candidates
+          </Button>
+        </div>
+
+        {addOpen ? (
+          <div className="mt-4">
+            <CandidateForm candidate={null} onClose={() => setAddOpen(false)} />
           </div>
         ) : null}
       </div>
 
+      <ImportCandidatesDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      <SelectCandidatesDialog open={selectOpen} onClose={() => setSelectOpen(false)} />
+
       {children}
-    </EditorContext.Provider>
+    </>
   );
 }
 
-/// The per-row edit control.
-export function EditButton({ candidate }: { candidate: EditableCandidate }) {
-  const { target, open } = useEditor();
-  const active = target.mode === "edit" && target.candidate.id === candidate.id;
-
+/// The per-row edit control — a plain link to the candidate's own edit page,
+/// not a client-state toggle. Styled as a button (`buttonClass`) so it reads
+/// identically to the old in-page Edit button.
+export function EditButton({ candidateId, candidateName }: { candidateId: string; candidateName: string }) {
   return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={() => open(active ? { mode: "closed" } : { mode: "edit", candidate })}
-      aria-expanded={active}
-      // The row is identified in the label because several of these buttons
-      // share one page and "Edit" alone does not say whom.
-      aria-label={`Edit ${candidate.name}`}
-      icon={<Pencil aria-hidden="true" className="size-3.5" />}
+    <Link
+      href={`/admin/candidates/${encodeURIComponent(candidateId)}/edit`}
+      // The name is in the label because several of these links share one
+      // page and "Edit" alone does not say whom.
+      aria-label={`Edit ${candidateName}`}
+      className={buttonClass("secondary", "sm")}
     >
+      <Pencil aria-hidden="true" className="size-3.5" />
       Edit
-    </Button>
+    </Link>
   );
 }

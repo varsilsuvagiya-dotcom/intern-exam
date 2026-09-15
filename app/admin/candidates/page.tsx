@@ -6,11 +6,24 @@ import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-b
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { buttonClass } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
-import { PAGE_SIZES, listCandidates, parseCandidateFilters } from "@/lib/admin/query-candidates";
+import { EmptyState, TableContainer, Td, Th } from "@/components/ui/table";
+import {
+  PAGE_SIZES,
+  SELECTION_FILTERS,
+  listCandidates,
+  parseCandidateFilters,
+  type SelectionFilter,
+} from "@/lib/admin/query-candidates";
 import { requireAdmin } from "@/lib/auth/require-admin";
 
+import { CandidateRow } from "./candidate-detail";
 import { CandidateEditor, EditButton } from "./candidate-editor";
+import { SelectionToggle } from "./selection-toggle";
+
+/// Columns after the leading expand-toggle column, kept in one place so the
+/// detail row's `colSpan` (in candidate-detail.tsx) cannot drift out of sync
+/// with the header.
+const COLUMN_COUNT = 7;
 
 export const metadata: Metadata = { title: "Candidates" };
 
@@ -20,6 +33,12 @@ export const dynamic = "force-dynamic";
 function formatDate(value: Date): string {
   return value.toISOString().slice(0, 16).replace("T", " ");
 }
+
+const SELECTION_LABELS: Record<SelectionFilter, string> = {
+  all: "All",
+  selected: "Selected",
+  not_selected: "Not selected",
+};
 
 export default async function CandidatesPage({
   searchParams,
@@ -36,6 +55,7 @@ export default async function CandidatesPage({
   const pageLink = (page: number): string => {
     const query = new URLSearchParams();
     if (filters.search) query.set("q", filters.search);
+    if (filters.selection !== "all") query.set("selected", filters.selection);
     if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
     query.set("page", String(page));
     return `/admin/candidates?${query}`;
@@ -74,9 +94,17 @@ export default async function CandidatesPage({
           name="q"
           label="Search"
           defaultValue={filters.search}
-          // Names the three fields the query layer actually searches. No other
-          // field is searchable, and none is claimed here.
-          placeholder="Name, email or mobile"
+          // Matches the query layer's SEARCHABLE_FIELDS: identity plus every
+          // profile field (city, education, technologies, links, long-form
+          // answers). Kept short here rather than naming all ~20 fields.
+          placeholder="Name, email, mobile, city, college…"
+        />
+        <SelectField
+          id="candidates-selection"
+          name="selected"
+          label="Selection"
+          value={filters.selection}
+          options={SELECTION_FILTERS.map((value) => [value, SELECTION_LABELS[value]] as [string, string])}
         />
         <SelectField
           id="candidates-page-size"
@@ -94,7 +122,7 @@ export default async function CandidatesPage({
             title={filters.search ? "No candidates match your search" : "No candidates yet"}
             body={
               filters.search
-                ? "Try a different name, email or mobile number."
+                ? "Try a different search term."
                 : "Candidates appear here once the Google Form sync runs, or you can add one above."
             }
             action={
@@ -110,10 +138,16 @@ export default async function CandidatesPage({
           />
         ) : (
           <>
-            <TableContainer label="Candidates table" minWidth={1020}>
+            <TableContainer label="Candidates table" minWidth={1220}>
               <thead>
                 <tr>
+                  {/* The leading expand-toggle column has no header label of
+                      its own — it is a row affordance, not a data column. */}
+                  <Th aria-hidden="true">
+                    <span className="sr-only">Expand</span>
+                  </Th>
                   <Th>Candidate</Th>
+                  <Th>Status</Th>
                   <Th>Mobile</Th>
                   <Th>Registered</Th>
                   <Th>Updated</Th>
@@ -123,7 +157,7 @@ export default async function CandidatesPage({
               </thead>
               <tbody>
                 {result.candidates.map((candidate) => (
-                  <Tr key={candidate.id}>
+                  <CandidateRow key={candidate.id} candidate={candidate} columnCount={COLUMN_COUNT}>
                     {/* Name and email form one identity cell: the name anchors
                         the row, the email supports it. This groups two columns
                         that previously carried equal weight. */}
@@ -135,6 +169,19 @@ export default async function CandidatesPage({
                         <span className="font-medium text-ink">{candidate.name}</span>
                         <span className="block text-xs break-all text-muted">{candidate.email}</span>
                       </div>
+                    </Td>
+                    {/* A switch, not just a badge: an admin can select or
+                        deselect this candidate for the exam right here.
+                        Reflects (and writes) the same CandidateExam
+                        existence check the Selected Candidates import and
+                        the Phase 17 eligibility gate both use — see
+                        app/admin/candidates/selection-actions.ts. */}
+                    <Td>
+                      <SelectionToggle
+                        candidateId={candidate.id}
+                        candidateName={candidate.name}
+                        initialSelected={candidate.isSelected}
+                      />
                     </Td>
                     <Td className="text-ink-secondary tabular whitespace-nowrap">
                       {candidate.mobile}
@@ -164,14 +211,7 @@ export default async function CandidatesPage({
                         rightmost thing on the row as it was before. */}
                     <Td align="right">
                       <div className="flex items-center justify-end gap-2">
-                        <EditButton
-                          candidate={{
-                            id: candidate.id,
-                            name: candidate.name,
-                            email: candidate.email,
-                            mobile: candidate.mobile,
-                          }}
-                        />
+                        <EditButton candidateId={candidate.id} candidateName={candidate.name} />
 
                         {/* `aria-label` rather than an `sr-only` span: an
                             absolutely-positioned span inside the scroll
@@ -185,7 +225,7 @@ export default async function CandidatesPage({
                         </Link>
                       </div>
                     </Td>
-                  </Tr>
+                  </CandidateRow>
                 ))}
               </tbody>
             </TableContainer>

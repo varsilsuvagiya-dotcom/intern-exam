@@ -6,7 +6,9 @@ frontend:
         - npm ci
     build:
       commands:
-        - npx prisma generate
+        - env | grep -e DATABASE_URL -e DIRECT_URL -e SUPABASE_URL -e ADMIN_EMAIL -e ADMIN_PASSWORD -e GOOGLE_APPS_SCRIPT_SECRET -e SCORING_RETRY_SECRET -e DATABASE_POOL_SIZE >> .env.production
+        - npx prisma generate --schema prisma/schema.prisma
+        - npm run db:schema
         - npm run build
   artifacts:
     baseDirectory: .next

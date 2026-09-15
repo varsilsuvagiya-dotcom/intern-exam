@@ -6,7 +6,7 @@ import { AlertTriangle, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/field";
 import { useActionToast } from "@/components/ui/toast";
 
 import {
@@ -17,12 +17,106 @@ import {
 } from "./actions";
 
 /// The candidate being edited, or null when adding a new one.
+///
+/// Add stays name/email/mobile only — a manual walk-in has no live-sheet
+/// profile to carry. Edit carries every Phase 12 profile field too, so
+/// correcting a synced candidate's details is not limited to the three
+/// identity fields the table shows — see candidate-detail.tsx's read-only
+/// view, which this mirrors field-for-field so what an admin sees expanded is
+/// exactly what they can then edit.
 export type EditableCandidate = {
   id: string;
   name: string;
   email: string;
   mobile: string;
+  currentCity: string | null;
+  willingFullTimeSurat: string | null;
+  dateOfBirth: Date | null;
+  highestQualification: string | null;
+  collegeName: string | null;
+  yearOfPassing: string | null;
+  cgpaOrPercentage: string | null;
+  technologies: string | null;
+  projectInfo: string | null;
+  githubUrl: string | null;
+  linkedinUrl: string | null;
+  liveProjectUrl: string | null;
+  selfLearningInfo: string | null;
+  aiToolsInfo: string | null;
+  reasonForJoining: string | null;
+  resumeUrl: string | null;
+  termsAgreement: string | null;
+  informationConfirmation: string | null;
+  hearAboutProgram: string | null;
 };
+
+function dateInputValue(value: Date | null): string {
+  return value ? value.toISOString().slice(0, 10) : "";
+}
+
+/// One profile section — same card-per-topic grouping as candidate-detail.tsx's
+/// `Section`, just holding inputs instead of read-only facts.
+function ProfileSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border border-line bg-subtle p-4">
+      <h3 className="text-xs font-semibold tracking-wide text-ink uppercase">{title}</h3>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+/// A single-line optional profile field. No `error`/`invalid` wiring — these
+/// are all free text with no validation, so there is nothing to report.
+function TextField({
+  id,
+  name,
+  label,
+  defaultValue,
+  type = "text",
+}: {
+  id: string;
+  name: string;
+  label: string;
+  defaultValue: string | null;
+  type?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <label htmlFor={id} className="block text-[13px] font-medium text-ink">
+        {label}
+      </label>
+      <div className="mt-1.5">
+        <Input id={id} name={name} type={type} defaultValue={defaultValue ?? ""} autoComplete="off" />
+      </div>
+    </div>
+  );
+}
+
+/// A long free-text profile field (project info, reason for joining, …) —
+/// spans both grid columns so it gets the width the other short fields don't
+/// need.
+function TextAreaField({
+  id,
+  name,
+  label,
+  defaultValue,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  defaultValue: string | null;
+}) {
+  return (
+    <div className="min-w-0 sm:col-span-2">
+      <label htmlFor={id} className="block text-[13px] font-medium text-ink">
+        {label}
+      </label>
+      <div className="mt-1.5">
+        <Textarea id={id} name={name} defaultValue={defaultValue ?? ""} rows={3} />
+      </div>
+    </div>
+  );
+}
 
 /// One labelled control with its error wired through `aria-describedby`.
 ///
@@ -242,6 +336,94 @@ export function CandidateForm({
             )}
           </Field>
         </div>
+
+        {/* The full profile, editing only. Grouped exactly as
+            candidate-detail.tsx's read-only view groups them, so the layout an
+            admin studied while expanded is the one they then edit — nothing
+            here is reordered or renamed relative to that view. All optional:
+            every field is nullable on Candidate and free text on the source
+            sheet, so nothing here can fail validation the way name/email/
+            mobile can. */}
+        {editing ? (
+          <div className="mt-5 grid grid-cols-1 gap-3 border-t border-line pt-5 lg:grid-cols-2">
+            <ProfileSection title="Personal">
+              <TextField id={fieldId("currentCity")} name="currentCity" label="Current city" defaultValue={candidate.currentCity} />
+              <TextField
+                id={fieldId("dateOfBirth")}
+                name="dateOfBirth"
+                label="Date of birth"
+                type="date"
+                defaultValue={dateInputValue(candidate.dateOfBirth)}
+              />
+              <TextField
+                id={fieldId("willingFullTimeSurat")}
+                name="willingFullTimeSurat"
+                label="Willing to relocate to Surat"
+                defaultValue={candidate.willingFullTimeSurat}
+              />
+            </ProfileSection>
+
+            <ProfileSection title="Education">
+              <TextField
+                id={fieldId("highestQualification")}
+                name="highestQualification"
+                label="Qualification"
+                defaultValue={candidate.highestQualification}
+              />
+              <TextField id={fieldId("collegeName")} name="collegeName" label="College / institute" defaultValue={candidate.collegeName} />
+              <TextField id={fieldId("yearOfPassing")} name="yearOfPassing" label="Year of passing" defaultValue={candidate.yearOfPassing} />
+              <TextField
+                id={fieldId("cgpaOrPercentage")}
+                name="cgpaOrPercentage"
+                label="CGPA / percentage"
+                defaultValue={candidate.cgpaOrPercentage}
+              />
+            </ProfileSection>
+
+            <ProfileSection title="Skills & links">
+              <TextField id={fieldId("technologies")} name="technologies" label="Technologies" defaultValue={candidate.technologies} />
+              <TextField id={fieldId("githubUrl")} name="githubUrl" label="GitHub" defaultValue={candidate.githubUrl} />
+              <TextField id={fieldId("linkedinUrl")} name="linkedinUrl" label="LinkedIn" defaultValue={candidate.linkedinUrl} />
+              <TextField id={fieldId("liveProjectUrl")} name="liveProjectUrl" label="Live project" defaultValue={candidate.liveProjectUrl} />
+              <TextField id={fieldId("resumeUrl")} name="resumeUrl" label="Resume" defaultValue={candidate.resumeUrl} />
+            </ProfileSection>
+
+            <ProfileSection title="Application">
+              <TextField
+                id={fieldId("hearAboutProgram")}
+                name="hearAboutProgram"
+                label="Heard about the program via"
+                defaultValue={candidate.hearAboutProgram}
+              />
+              <TextField id={fieldId("termsAgreement")} name="termsAgreement" label="Terms agreement" defaultValue={candidate.termsAgreement} />
+              <TextField
+                id={fieldId("informationConfirmation")}
+                name="informationConfirmation"
+                label="Information confirmed"
+                defaultValue={candidate.informationConfirmation}
+              />
+            </ProfileSection>
+
+            <div className="lg:col-span-2">
+              <ProfileSection title="In their own words">
+                <TextAreaField id={fieldId("projectInfo")} name="projectInfo" label="Project info" defaultValue={candidate.projectInfo} />
+                <TextAreaField
+                  id={fieldId("selfLearningInfo")}
+                  name="selfLearningInfo"
+                  label="Self-learning info"
+                  defaultValue={candidate.selfLearningInfo}
+                />
+                <TextAreaField id={fieldId("aiToolsInfo")} name="aiToolsInfo" label="AI tools used" defaultValue={candidate.aiToolsInfo} />
+                <TextAreaField
+                  id={fieldId("reasonForJoining")}
+                  name="reasonForJoining"
+                  label="Reason for joining"
+                  defaultValue={candidate.reasonForJoining}
+                />
+              </ProfileSection>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button

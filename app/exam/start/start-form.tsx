@@ -155,6 +155,17 @@ export function StartForm({ className = "" }: { className?: string }) {
           </ExamNotice>
         ) : null}
 
+        {/* Distinct from `ineligible`: the candidate exists but has no
+            CandidateExam for this exam. Wording is the brief's own, and
+            deliberately names no internal concept (CandidateExam, database,
+            Prisma, ExamSetting, ids) — only that they should contact the
+            administrator. */}
+        {state.kind === "not_selected" ? (
+          <ExamNotice tone="danger" title="You are not currently selected for this examination">
+            Please contact the examination administrator if you believe this is incorrect.
+          </ExamNotice>
+        ) : null}
+
         {state.kind === "failed" ? (
           <ExamNotice tone="danger" title="The examination could not be started">
             Please tell your examination supervisor.
