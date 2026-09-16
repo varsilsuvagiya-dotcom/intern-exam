@@ -23,7 +23,16 @@ const DEV_SERVER_ORIGIN = "localhost:3000";
 /// is `**.localhost` for the same reason.
 const DEV_TUNNEL_HOSTS = ["**.devtunnels.ms"];
 
+/// Build metadata for /api/version.
+const buildInfo = {
+  NEXT_PUBLIC_COMMIT_ID: process.env.AWS_COMMIT_ID ?? "",
+  NEXT_PUBLIC_BRANCH: process.env.AWS_BRANCH ?? "",
+  NEXT_PUBLIC_BUILD_ID: process.env.AWS_JOB_ID ?? "",
+  NEXT_PUBLIC_BUILT_AT: new Date().toISOString(),
+};
+
 const nextConfig: NextConfig = {
+  env: buildInfo,
   allowedDevOrigins: isDevelopment ? DEV_TUNNEL_HOSTS : undefined,
   experimental: {
     serverActions: {

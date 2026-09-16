@@ -1,9 +1,10 @@
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { buildDetailCsv, exportFilename } from "@/lib/admin/csv-export";
+import { exportFilename } from "@/lib/admin/sheet-export";
+import { XLSX_CONTENT_TYPE, buildDetailXlsx } from "@/lib/admin/xlsx-export";
 
 export const dynamic = "force-dynamic";
 
-/// Admin CSV export of one attempt's question-by-question result.
+/// Admin Excel export of one attempt's question-by-question result.
 ///
 /// Only a finalized, scored attempt can be exported. An in-progress attempt is
 /// refused because the rows carry the correct answers and explanations, and
@@ -16,7 +17,7 @@ export async function GET(
   await requireAdmin();
 
   const { id } = await params;
-  const result = await buildDetailCsv(id);
+  const result = await buildDetailXlsx(id);
 
   if (result.kind === "not-found") {
     return new Response("Attempt not found.", { status: 404 });
@@ -26,10 +27,11 @@ export async function GET(
     return new Response("This attempt has no scored result to export.", { status: 409 });
   }
 
-  return new Response(result.csv, {
+  // `new Uint8Array(...)` rather than the Buffer itself: Node's Buffer is not
+  // in the DOM `BodyInit` union that the Response type expects.
+  return new Response(new Uint8Array(result.buffer), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      // The attempt id identifies the export without naming the candidate.
+      "Content-Type": XLSX_CONTENT_TYPE,
       "Content-Disposition": `attachment; filename="${exportFilename(`cloudus-result-${id}`)}"`,
       "Cache-Control": "no-store",
     },

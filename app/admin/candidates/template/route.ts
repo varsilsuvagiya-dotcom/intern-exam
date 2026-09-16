@@ -1,24 +1,17 @@
 import { requireAdmin } from "@/lib/auth/require-admin";
-import { toCsv } from "@/lib/admin/csv-export";
-import { TEMPLATE_EXAMPLE_ROW, TEMPLATE_HEADERS } from "@/lib/candidate-import/csv-contract";
+import { XLSX_CONTENT_TYPE, buildTemplateXlsx } from "@/lib/admin/xlsx-export";
 
 export const dynamic = "force-dynamic";
 
-/// Downloadable candidate import template.
-///
-/// Headers come straight from the import contract, so a file started here is
-/// one the importer accepts by construction — change a header there and this
-/// download changes with it. Contains no candidate data: one illustrative
-/// example row only.
 export async function GET(): Promise<Response> {
   await requireAdmin();
 
-  const csv = toCsv([...TEMPLATE_HEADERS], [TEMPLATE_EXAMPLE_ROW]);
-
-  return new Response(csv, {
+  // `new Uint8Array(...)` rather than the Buffer itself: Node's Buffer is not
+  // in the DOM `BodyInit` union that the Response type expects.
+  return new Response(new Uint8Array(buildTemplateXlsx()), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="cloudus-candidate-import-template.csv"',
+      "Content-Type": XLSX_CONTENT_TYPE,
+      "Content-Disposition": 'attachment; filename="cloudus-candidate-import-template.xlsx"',
       "Cache-Control": "no-store",
     },
   });

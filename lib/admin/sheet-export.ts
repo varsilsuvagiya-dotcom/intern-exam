@@ -1,7 +1,5 @@
 import "server-only";
 
-import Papa from "papaparse";
-
 import { prisma } from "@/lib/db";
 import {
   SECTION_BLUEPRINT,
@@ -12,21 +10,18 @@ import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 import { buildWhere, sortOrder, type AttemptFilters } from "./query-attempts";
 
-/// CSV generation for the admin exports.
+/// Row generation for the admin exports.
 ///
-/// Both exports are read-only and both read persisted data only: the summary
-/// takes the score columns Phase 12 wrote, and the detailed export takes the
-/// `AttemptQuestion` snapshot. Neither touches the live `Question` table, so an
-/// export produced today and the same export produced after the question bank
-/// is edited are identical.
+/// These functions produce plain header/row data; `xlsx-export.ts` turns it
+/// into the downloaded workbook. Both exports are read-only and both read
+/// persisted data only: the summary takes the score columns Phase 12 wrote, and
+/// the detailed export takes the `AttemptQuestion` snapshot. Neither touches
+/// the live `Question` table, so an export produced today and the same export
+/// produced after the question bank is edited are identical.
 
 const OPTION_LABEL: Record<OptionKey, string> = { a: "A", b: "B", c: "C", d: "D" };
 
 export const MAX_TOTAL = TOTAL_MARKS.toFixed(2);
-
-/// Excel reads a leading U+FEFF as an encoding marker and renders UTF-8
-/// correctly; without it, non-ASCII text (Gujarati, accented Latin) is mangled.
-export const BOM = "﻿";
 
 /// Two decimals, always, straight from the Decimal's own string. A null score —
 /// an attempt that is unfinished or unscored — exports as an empty cell rather
@@ -53,18 +48,6 @@ function timestamp(value: Date | null): string {
 /// quote is a far smaller cost than executing a formula.
 export function neutralize(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-}
-
-/// Serializes rows through papaparse — the same library the question-bank
-/// import already uses — so commas, quotes, newlines, carriage returns, tabs and
-/// Unicode are escaped by a real CSV writer rather than by string concatenation.
-export function toCsv(headers: string[], rows: Record<string, string>[]): string {
-  const guarded = rows.map((row) => headers.map((header) => neutralize(row[header] ?? "")));
-
-  // The `{ fields, data }` form rather than an array of objects: it fixes the
-  // column order and still writes the header row when there are no data rows,
-  // whereas passing an empty array with `columns` produces an empty string.
-  return BOM + Papa.unparse({ fields: headers, data: guarded }, { newline: "\r\n" });
 }
 
 // ---------------------------------------------------------------- summary ---
@@ -105,7 +88,9 @@ export const SUMMARY_HEADERS = [
 ///
 /// A score column is blank unless the attempt is both finalized and scored, so
 /// an in-progress or scoring-pending attempt can never be read as a result.
-export async function buildSummaryCsv(filters: AttemptFilters): Promise<string> {
+export async function buildSummaryRows(
+  filters: AttemptFilters,
+): Promise<Record<string, string>[]> {
   // The candidate id is resolved before use. An id that matches nothing yields
   // an empty export rather than silently dropping the filter and exporting
   // every candidate in the database.
@@ -117,7 +102,7 @@ export async function buildSummaryCsv(filters: AttemptFilters): Promise<string> 
     : null;
 
   if (filters.candidateId !== "" && candidate === null) {
-    return toCsv([...SUMMARY_HEADERS], []);
+    return [];
   }
 
   const rows = await prisma.attempt.findMany({
@@ -144,7 +129,7 @@ export async function buildSummaryCsv(filters: AttemptFilters): Promise<string> 
     },
   });
 
-  const csvRows = rows.map((row) => {
+  const sheetRows = rows.map((row) => {
     const sectionValues: Record<number, { toString(): string } | null> = {
       1: row.section1Score,
       2: row.section2Score,
@@ -196,7 +181,7 @@ export async function buildSummaryCsv(filters: AttemptFilters): Promise<string> 
     return record;
   });
 
-  return toCsv([...SUMMARY_HEADERS], csvRows);
+  return sheetRows;
 }
 
 // --------------------------------------------------------------- detailed ---
@@ -233,15 +218,18 @@ export const DETAIL_HEADERS = [
   "scored",
 ] as const;
 
-export type DetailExport =
-  | { kind: "ok"; csv: string }
+export type DetailRowsExport =
+  | { kind: "ok"; rows: Record<string, string>[] }
   | { kind: "not-found" }
   /// The attempt has no stored result, so there is nothing to export — and for
   /// an in-progress attempt, exporting would hand over the answer key mid-exam.
   | { kind: "not-scored" };
 
 /// One row per question for a single finalized, scored attempt.
-export async function buildDetailCsv(attemptId: string): Promise<DetailExport> {
+///
+/// Returns the plain row records so the same data can be serialized as CSV or
+/// as a styled worksheet without querying twice.
+export async function buildDetailRows(attemptId: string): Promise<DetailRowsExport> {
   if (typeof attemptId !== "string" || attemptId === "" || attemptId.length > 100) {
     return { kind: "not-found" };
   }
@@ -294,7 +282,7 @@ export async function buildDetailCsv(attemptId: string): Promise<DetailExport> {
     },
   });
 
-  const csvRows = rows.map((row) => {
+  const sheetRows = rows.map((row) => {
     const byKey: Record<OptionKey, string> = {
       a: row.optionA,
       b: row.optionB,
@@ -354,11 +342,12 @@ export async function buildDetailCsv(attemptId: string): Promise<DetailExport> {
     };
   });
 
-  return { kind: "ok", csv: toCsv([...DETAIL_HEADERS], csvRows) };
+  return { kind: "ok", rows: sheetRows };
 }
 
-/// `cloudus-attempts-2026-09-09.csv`. Carries no candidate name, email or
+
+/// `cloudus-attempts-2026-09-09.xlsx`. Carries no candidate name, email or
 /// mobile: a filename ends up in download histories and shared folders.
-export function exportFilename(prefix: string, now = new Date()): string {
-  return `${prefix}-${now.toISOString().slice(0, 10)}.csv`;
+export function exportFilename(prefix: string, now = new Date(), extension = "xlsx"): string {
+  return `${prefix}-${now.toISOString().slice(0, 10)}.${extension}`;
 }

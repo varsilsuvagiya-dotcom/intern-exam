@@ -84,7 +84,7 @@ export default async function AttemptsPage({
             className={buttonClass("secondary")}
           >
             <Download aria-hidden="true" className="size-4" />
-            Export CSV
+            Export Excel
           </a>
         }
       />

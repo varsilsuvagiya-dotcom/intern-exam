@@ -172,17 +172,13 @@ export default async function AttemptResultPage({
         title="Attempt result"
         description="Reviewed from the paper snapshot taken at exam time, so later question-bank edits do not change it."
         actions={
-          // Offered only for a scored attempt: the rows carry correct answers
-          // and explanations, so there is nothing safe to export before then.
-          // Absent rather than disabled for the other states, since the alert
-          // below already explains the situation.
           result.kind === "scored" ? (
             <a
               href={`/admin/attempts/${encodeURIComponent(summary.id)}/export`}
               className={buttonClass("secondary")}
             >
               <Download aria-hidden="true" className="size-4" />
-              Export result CSV
+              Export result Excel
             </a>
           ) : null
         }

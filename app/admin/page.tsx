@@ -227,7 +227,7 @@ export default async function AdminPage() {
             <Upload aria-hidden="true" className="size-4" />
             Import CSV
           </Link>
-          {/* A route handler that streams a CSV download, not a page. `Link`
+          {/* A route handler that streams an Excel download, not a page. `Link`
               would client-navigate and break the download, so this stays a
               plain anchor. */}
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}

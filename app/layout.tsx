@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   },
   description: "CloudUS Online Examination System",
   applicationName: "CloudUS",
+  robots: { index: false, follow: false },
   openGraph: {
     title: "CloudUS",
     description: "CloudUS Online Examination System",

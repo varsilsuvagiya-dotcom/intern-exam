@@ -1,42 +1,25 @@
 import "server-only";
 
-/// The fixed shape of the CloudUS exam: 22 questions worth 34 marks across the
-/// three sections the client supplied a question bank for.
+/// The fixed shape of the CloudUS exam: 22 questions worth 34 marks.
 ///
-/// These are domain rules rather than admin settings, and are deliberately not
-/// stored in the database. Question counts and marks are what scoring and paper
-/// generation are built on: a paper with 9 questions in Output Prediction is not
-/// a differently-configured exam, it is a broken one. Since the only value that
-/// would ever pass validation is the value below, an editable field would be a
-/// control with exactly one legal setting. The admin UI shows them read-only.
+/// Domain rules, not admin settings, so deliberately not in the database —
+/// scoring and paper generation are built on these counts, and the only value
+/// that would pass validation is the one below. The admin UI shows them
+/// read-only. If the exam specification changes, change it here.
 ///
-/// This is the single definition of the active exam structure. The section
-/// `code` is canonical — it is what `Question.section` stores and what every
-/// piece of active logic compares against.
+/// `code` is canonical: it is what `Question.section` stores and what all
+/// active logic compares against. `ordinal` exists only for two historical
+/// structures keyed by section number — the `AttemptQuestion.section` snapshot
+/// and the `section_1_score` … `section_8_score` columns. It is never a second
+/// source of truth for what a section *is*.
 ///
-/// `ordinal` exists for one reason only: two historical structures are keyed by
-/// a section number and must not be rewritten. `AttemptQuestion.section` is an
-/// Int snapshot of the section a question was drawn into, and `Attempt` carries
-/// `section_1_score` … `section_8_score` columns. New papers therefore record
-/// the ordinal alongside the code so a drawn paper stays readable by the same
-/// code that reads historical ones. It is never a second source of truth for
-/// what a section *is*.
-///
-/// The three active sections keep the ordinals 3, 5 and 7 they have always
-/// had, rather than being renumbered to 1, 2, 3. Renumbering would silently
-/// change what `AttemptQuestion.section` means on every paper already sat, and
-/// would point the `section_N_score` columns at the wrong sections. Gaps in the
-/// sequence are the correct outcome, not a defect.
-///
-/// If the exam specification itself ever changes, this is the single place to
-/// change it.
+/// Hence the ordinals 3, 5 and 7 rather than 1, 2, 3: renumbering would change
+/// what `AttemptQuestion.section` means on every paper already sat and point
+/// the score columns at the wrong sections. The gaps are correct.
 
-/// The one array to edit. Every other export on this page — `SECTION_CODES`,
-/// `TOTAL_QUESTIONS`, `TOTAL_MARKS`, the lookup maps, all of it — is derived
-/// from this, so adding, removing or resizing a section never needs a second
-/// edit anywhere else in this file. (The database still needs the section's
-/// questions imported and activated before a paper can actually draw from it —
-/// this array only tells the app the section exists.)
+/// The one array to edit — every other export here is derived from it. (The
+/// database still needs the section's questions imported and activated before a
+/// paper can draw from it; this array only says the section exists.)
 const BLUEPRINT_SOURCE = [
   { code: "JS", ordinal: 3, name: "Programming Fundamentals", questionCount: 10, marksPerQuestion: 1 },
   { code: "BUG", ordinal: 5, name: "Debugging", questionCount: 6, marksPerQuestion: 1.5 },
