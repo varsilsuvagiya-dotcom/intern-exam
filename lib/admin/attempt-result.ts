@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { SECTION_BLUEPRINT, TOTAL_MARKS } from "@/lib/exam-settings/exam-blueprint";
+import { sectionBlueprintByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { AttemptStatus, OptionKey } from "@/lib/generated/prisma/enums";
 
 import { STATUS_LABELS } from "./query-attempts";
@@ -22,8 +22,6 @@ import { STATUS_LABELS } from "./query-attempts";
 ///     page during a supervised sitting could reveal correct answers.
 
 const OPTION_LABEL: Record<OptionKey, string> = { a: "A", b: "B", c: "C", d: "D" };
-
-export const MAX_TOTAL = TOTAL_MARKS.toFixed(2);
 
 /// Decimal values arrive as Prisma Decimal. Formatting through `toFixed(2)` on
 /// the decimal's own string keeps 1.5 as "1.50" and never produces artefacts
@@ -386,51 +384,56 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
 
   const sections: ReviewSection[] = [];
   const sectionScores: SectionScoreRow[] = [];
+  let maxTotalHundredths = 0;
 
-  for (const blueprint of SECTION_BLUEPRINT) {
-    // Snapshots record the ordinal, so a stored paper is matched on that.
-    const inSection = reviewed.filter((question) => question.section === blueprint.ordinal);
-    const maxScore = (blueprint.questionCount * blueprint.marksPerQuestion).toFixed(2);
-    // The persisted column is authoritative for what was achieved; the
-    // blueprint only supplies the label and the maximum.
-    const score = money(persistedSectionScore[blueprint.ordinal] ?? null);
+  // Only the sections this specific paper was actually drawn from — never
+  // every section the current blueprint happens to define. A section toggled
+  // on or off after this attempt was sat must not add or remove a row from
+  // its review: the paper's own recorded ordinals are what it was scored
+  // against, and that is what is shown here.
+  const presentOrdinals = [...new Set(reviewed.map((question) => question.section))].sort(
+    (a, b) => a - b,
+  );
 
-    sectionScores.push({ section: blueprint.ordinal, name: blueprint.name, score, maxScore });
+  for (const ordinal of presentOrdinals) {
+    const blueprint = sectionBlueprintByOrdinal(ordinal);
+    const inSection = reviewed.filter((question) => question.section === ordinal);
 
-    if (inSection.length === 0) {
+    if (!blueprint) {
+      // A paper drawn under an earlier structure can hold a section the
+      // blueprint no longer defines at all. Shown rather than dropped: the
+      // exam was sat, and the review must not silently omit questions the
+      // candidate answered.
+      sections.push({
+        section: 0,
+        name: "Retired section",
+        scored: false,
+        score: "0.00",
+        maxScore: "0.00",
+        groups: groupQuestions(0, inSection),
+        questionCount: inSection.length,
+      });
       continue;
     }
 
+    const maxScore = (blueprint.questionCount * blueprint.marksPerQuestion).toFixed(2);
+    // The persisted column is authoritative for what was achieved; the
+    // blueprint only supplies the label and the maximum.
+    const score = money(persistedSectionScore[ordinal] ?? null);
+
+    maxTotalHundredths += Math.round(blueprint.questionCount * blueprint.marksPerQuestion * 100);
+
+    sectionScores.push({ section: ordinal, name: blueprint.name, score, maxScore });
+
     sections.push({
-      section: blueprint.ordinal,
+      section: ordinal,
       name: blueprint.name,
-      // Every active section is scored. A historical paper may still hold a
-      // section the blueprint no longer knows; that is handled below.
+      // Every active section is scored.
       scored: true,
       score,
       maxScore,
-      groups: groupQuestions(blueprint.ordinal, inSection),
+      groups: groupQuestions(ordinal, inSection),
       questionCount: inSection.length,
-    });
-  }
-
-  // A paper holding a section the blueprint does not know would otherwise be
-  // silently dropped from the review.
-  // A paper drawn under an earlier structure holds sections the active
-  // blueprint no longer knows. They are shown rather than dropped: the exam was
-  // sat, and the review must not silently omit questions the candidate answered.
-  const known = new Set(SECTION_BLUEPRINT.map((entry) => entry.ordinal));
-  const unknown = reviewed.filter((question) => !known.has(question.section));
-
-  if (unknown.length > 0) {
-    sections.push({
-      section: 0,
-      name: "Retired section",
-      scored: false,
-      score: "0.00",
-      maxScore: "0.00",
-      groups: groupQuestions(0, unknown),
-      questionCount: unknown.length,
     });
   }
 
@@ -438,7 +441,7 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
     kind: "scored",
     summary,
     totalScore: money(attempt.totalScore),
-    maxScore: MAX_TOTAL,
+    maxScore: (maxTotalHundredths / 100).toFixed(2),
     sectionScores,
     sections,
     questionCount: reviewed.length,

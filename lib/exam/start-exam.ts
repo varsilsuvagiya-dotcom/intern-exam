@@ -5,7 +5,28 @@ import { getExamSettings, SETTINGS_ID } from "@/lib/exam-settings";
 import { normalizeMobile } from "@/lib/integrations/candidate-payload";
 
 import { createExamSession } from "./exam-session";
-import { ensureExamPaper } from "./paper-generation";
+import { failureReason, type FailureReason } from "./failure-reason";
+import { ensureExamPaper, type GenerationFailure } from "./paper-generation";
+
+/// Turns an internal failure code into a plain sentence for the server log, so
+/// an admin reading it does not have to decode the JSON `failure` object by
+/// hand. Candidates never see this — only `console.error`.
+function describeFailure(failure: GenerationFailure): string {
+  switch (failure.code) {
+    case "ATTEMPT_NOT_FOUND":
+      return "the attempt row was not found.";
+    case "ATTEMPT_NOT_IN_PROGRESS":
+      return "the attempt is no longer in progress.";
+    case "NO_ACTIVE_SECTIONS":
+      return "no exam sections are active — enable at least one in Settings.";
+    case "SECTION_INSUFFICIENT_QUESTIONS":
+      return `section "${failure.section}" needs ${failure.required} active questions but only has ${failure.available} — import or activate more questions for this section.`;
+    case "LESSON_SECTION_INSUFFICIENT_GROUPS":
+      return `Learn-and-Apply needs 2 lesson groups of 3 but only has ${failure.available} — import or activate more Learn-and-Apply questions.`;
+    case "PAPER_INVARIANT_FAILED":
+      return `paper failed validation: ${failure.problems.join("; ")}`;
+  }
+}
 
 const MAX_EMAIL = 320;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,7 +45,18 @@ export type StartOutcome =
   | { kind: "not_selected" }
   | { kind: "completed" }
   | { kind: "invalid"; errors: { field: string; message: string }[] }
-  | { kind: "failed" };
+  /// `reason` says which *kind* of failure this was, never which section or
+  /// how many questions it was short. A candidate must be able to tell "this
+  /// will not work until staff fix it" from "try again in a moment", because
+  /// those call for opposite actions — but the bank's composition is not
+  /// theirs to see, so the internals stay in the server log.
+  ///
+  /// - `not_ready`: the exam itself is not set up — no active sections, a
+  ///   section short of questions, or a paper that failed validation. Retrying
+  ///   cannot help; an administrator has to act.
+  /// - `error`: anything transient or internal — the database threw, the
+  ///   attempt vanished mid-start. Retrying may well work.
+  | { kind: "failed"; reason: FailureReason };
 
 export type StartInput = { email: string; mobile: string };
 
@@ -93,16 +125,20 @@ async function withPaper(
     const result = await ensureExamPaper(attemptId);
 
     if (!result.ok) {
-      console.error("Exam paper could not be generated.", { failure: result.failure });
+      console.error(`Exam paper could not be generated: ${describeFailure(result.failure)}`, {
+        failure: result.failure,
+      });
       if (created) await discardEmptyAttempt(attemptId);
-      return { kind: "failed" };
+      return { kind: "failed", reason: failureReason(result.failure) };
     }
   } catch (error) {
     console.error("Exam paper generation threw.", {
       name: error instanceof Error ? error.name : "UnknownError",
     });
     if (created) await discardEmptyAttempt(attemptId);
-    return { kind: "failed" };
+    // A thrown generation is not a configuration verdict — the bank may be
+    // perfectly fine and the database merely unreachable.
+    return { kind: "failed", reason: "error" };
   }
 
   // Issued only now, once eligibility and the paper are both settled. The cookie
@@ -261,12 +297,12 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
       // The winner of the race created this attempt, not us. Treated as a
       // resume so a concurrent start cannot delete the attempt that won.
-      return attempt ? withPaper(attempt.id, true, false) : { kind: "failed" };
+      return attempt ? withPaper(attempt.id, true, false) : { kind: "failed", reason: "error" };
     }
 
     console.error("Exam start failed.", {
       name: error instanceof Error ? error.name : "UnknownError",
     });
-    return { kind: "failed" };
+    return { kind: "failed", reason: "error" };
   }
 }

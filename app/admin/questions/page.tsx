@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileQuestion, Upload } from "lucide-react";
+import { Download, FileQuestion } from "lucide-react";
 
 import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
@@ -66,7 +66,7 @@ export default async function QuestionBankPage({
             href="/admin/questions/import"
             className={buttonClass("secondary")}
           >
-            <Upload aria-hidden="true" className="size-4" />
+            <Download aria-hidden="true" className="size-4" />
             Import CSV
           </Link>
         }

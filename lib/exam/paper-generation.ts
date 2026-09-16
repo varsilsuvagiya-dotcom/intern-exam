@@ -8,10 +8,10 @@ import {
   LESSON_SECTION,
   QUESTIONS_PER_LESSON_GROUP,
   SECTION_BLUEPRINT,
-  TOTAL_MARKS,
-  TOTAL_QUESTIONS,
+  type SectionBlueprint,
   type SectionCode,
 } from "@/lib/exam-settings/exam-blueprint";
+import { getActiveSectionCodes } from "@/lib/exam-settings";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 import {
@@ -29,6 +29,7 @@ const OPTION_KEYS: OptionKey[] = ["a", "b", "c", "d"];
 export type GenerationFailure =
   | { code: "ATTEMPT_NOT_FOUND" }
   | { code: "ATTEMPT_NOT_IN_PROGRESS" }
+  | { code: "NO_ACTIVE_SECTIONS" }
   | { code: "SECTION_INSUFFICIENT_QUESTIONS"; section: string; required: number; available: number }
   | { code: "LESSON_SECTION_INSUFFICIENT_GROUPS"; available: number }
   | { code: "PAPER_INVARIANT_FAILED"; problems: string[] };
@@ -200,18 +201,35 @@ function pickLessonGroups(
 
 /// Pure invariant check over a fully assembled paper. Kept separate so it can be
 /// tested on its own, and so nothing reaches the database unvalidated.
+///
+/// `activeSections` is the blueprint filtered to the sections enabled at draw
+/// time — the same set `ensureExamPaper` drew from — never the full static
+/// blueprint. A section disabled before this paper was drawn must not be
+/// expected here, and one disabled afterward must not retroactively fail an
+/// already-validated paper if this is ever re-run.
+///
+/// Required, deliberately. Defaulting it to `SECTION_BLUEPRINT` made exactly
+/// that retroactive comparison the implicit behaviour for any future caller
+/// that forgot to pass the draw-time set.
 export function validateGeneratedPaper(
   rows: { section: number; displayOrder: number; questionId: string; marks: string; shuffledOptionOrder: OptionKey[]; lessonGroup: string | null }[],
+  activeSections: readonly SectionBlueprint[],
 ): string[] {
   const problems: string[] = [];
 
-  if (rows.length !== TOTAL_QUESTIONS) {
-    problems.push(`expected ${TOTAL_QUESTIONS} questions, assembled ${rows.length}`);
+  const expectedQuestions = activeSections.reduce((total, entry) => total + entry.questionCount, 0);
+  const expectedMarks = activeSections.reduce(
+    (total, entry) => total + entry.questionCount * entry.marksPerQuestion,
+    0,
+  );
+
+  if (rows.length !== expectedQuestions) {
+    problems.push(`expected ${expectedQuestions} questions, assembled ${rows.length}`);
   }
 
   const totalMarks = rows.reduce((sum, row) => sum + Number(row.marks), 0);
-  if (Math.abs(totalMarks - TOTAL_MARKS) > 0.001) {
-    problems.push(`expected ${TOTAL_MARKS} marks, assembled ${totalMarks}`);
+  if (Math.abs(totalMarks - expectedMarks) > 0.001) {
+    problems.push(`expected ${expectedMarks} marks, assembled ${totalMarks}`);
   }
 
   if (new Set(rows.map((row) => row.questionId)).size !== rows.length) {
@@ -229,7 +247,7 @@ export function validateGeneratedPaper(
 
   // Sections must occupy consecutive blocks in blueprint order.
   let cursor = 0;
-  for (const section of SECTION_BLUEPRINT) {
+  for (const section of activeSections) {
     const block = rows
       .filter((row) => row.section === section.ordinal)
       .sort((a, b) => a.displayOrder - b.displayOrder);
@@ -248,26 +266,31 @@ export function validateGeneratedPaper(
     cursor += section.questionCount;
   }
 
-  const lessonOrdinal = SECTION_BLUEPRINT.find((entry) => entry.code === LESSON_SECTION)?.ordinal;
-  const lessonRows = rows.filter((row) => row.section === lessonOrdinal);
-  const lessonGroups = new Set(lessonRows.map((row) => row.lessonGroup));
-  if (lessonGroups.size !== LESSON_GROUPS_PER_PAPER) {
-    problems.push(`section ${LESSON_SECTION} has ${lessonGroups.size} lesson groups, expected ${LESSON_GROUPS_PER_PAPER}`);
-  }
-  for (const group of lessonGroups) {
-    const size = lessonRows.filter((row) => row.lessonGroup === group).length;
-    if (size !== QUESTIONS_PER_LESSON_GROUP) {
-      problems.push(`lesson group ${group} contributes ${size} questions, expected ${QUESTIONS_PER_LESSON_GROUP}`);
+  // Only checked when Learn-and-Apply is actually one of the sections this
+  // paper was drawn from — a paper drawn while LRN was disabled correctly
+  // has zero lesson rows, and that is not itself a fault to report here.
+  if (activeSections.some((entry) => entry.code === LESSON_SECTION)) {
+    const lessonOrdinal = SECTION_BLUEPRINT.find((entry) => entry.code === LESSON_SECTION)?.ordinal;
+    const lessonRows = rows.filter((row) => row.section === lessonOrdinal);
+    const lessonGroups = new Set(lessonRows.map((row) => row.lessonGroup));
+    if (lessonGroups.size !== LESSON_GROUPS_PER_PAPER) {
+      problems.push(`section ${LESSON_SECTION} has ${lessonGroups.size} lesson groups, expected ${LESSON_GROUPS_PER_PAPER}`);
     }
-  }
-  // Each group must be contiguous, so its three questions stay together.
-  for (const group of lessonGroups) {
-    const positions = lessonRows
-      .filter((row) => row.lessonGroup === group)
-      .map((row) => row.displayOrder)
-      .sort((a, b) => a - b);
-    if (positions[positions.length - 1] - positions[0] !== positions.length - 1) {
-      problems.push(`lesson group ${group} is split across the paper`);
+    for (const group of lessonGroups) {
+      const size = lessonRows.filter((row) => row.lessonGroup === group).length;
+      if (size !== QUESTIONS_PER_LESSON_GROUP) {
+        problems.push(`lesson group ${group} contributes ${size} questions, expected ${QUESTIONS_PER_LESSON_GROUP}`);
+      }
+    }
+    // Each group must be contiguous, so its three questions stay together.
+    for (const group of lessonGroups) {
+      const positions = lessonRows
+        .filter((row) => row.lessonGroup === group)
+        .map((row) => row.displayOrder)
+        .sort((a, b) => a - b);
+      if (positions[positions.length - 1] - positions[0] !== positions.length - 1) {
+        problems.push(`lesson group ${group} is split across the paper`);
+      }
     }
   }
 
@@ -324,7 +347,17 @@ export async function ensureExamPaper(
   // unchanged: the cache stores exactly the ready + active set.
   const pool = await getQuestionPool();
 
-  const blueprintFor = new Map(SECTION_BLUEPRINT.map((entry) => [entry.code as string, entry]));
+  // The sections enabled right now, at the moment this paper is drawn. Once
+  // written, the drawn rows are permanent regardless of any later toggle —
+  // this is the one and only read of that state for this attempt.
+  const activeCodes = await getActiveSectionCodes();
+  const activeSections = SECTION_BLUEPRINT.filter((entry) => activeCodes.has(entry.code));
+
+  if (activeSections.length === 0) {
+    return { ok: false, failure: { code: "NO_ACTIVE_SECTIONS" } };
+  }
+
+  const blueprintFor = new Map(activeSections.map((entry) => [entry.code as string, entry]));
 
   const bySection = new Map<string, PoolQuestion[]>();
   for (const row of pool) {
@@ -361,7 +394,7 @@ export async function ensureExamPaper(
 
   const selected: SelectedQuestion[] = [];
 
-  for (const section of SECTION_BLUEPRINT) {
+  for (const section of activeSections) {
     const sectionPool = bySection.get(section.code) ?? [];
 
     if (section.code === LESSON_SECTION) {
@@ -416,7 +449,7 @@ export async function ensureExamPaper(
     shuffledOptionOrder: shuffledOptions(rand),
   }));
 
-  const problems = validateGeneratedPaper(rows);
+  const problems = validateGeneratedPaper(rows, activeSections);
 
   if (problems.length > 0) {
     return { ok: false, failure: { code: "PAPER_INVARIANT_FAILED", problems } };

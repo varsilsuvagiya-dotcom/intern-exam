@@ -17,7 +17,7 @@ export default async function ExamStartPage() {
   // The blueprint is the authoritative source for the paper's shape — the same
   // one paper generation and scoring validate against, and the one the admin
   // settings screen displays. Nothing about the exam is restated here.
-  const { totalQuestions, totalMarks } = examBlueprintSummary();
+  const { totalQuestions, totalMarks } = await examBlueprintSummary();
 
   return (
     <main className="flex flex-1 flex-col items-center px-4 py-6 sm:px-6">

@@ -388,6 +388,25 @@ model ExamSetting {
   @@map("exam_settings")
 }
 
+/// Whether an active blueprint section currently takes part in paper
+/// generation. One row per section `code` from `SECTION_BLUEPRINT` — the
+/// blueprint itself (names, ordinals, question counts, marks) is still
+/// defined in code; this table only says whether each is switched on.
+///
+/// A drawn paper never reads this table again: `ensureExamPaper` consults it
+/// once, at draw time, to decide which sections to pull from, and the result
+/// is baked into the AttemptQuestion rows it writes. Toggling a section here
+/// afterward has zero effect on papers already drawn — scoring, review and
+/// export all read the stored snapshot, never this table.
+model ExamSectionSetting {
+  /// The blueprint's canonical section code (e.g. "JS", "BUG", "LRN").
+  code      String   @id
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("exam_section_settings")
+}
+
 /// Ties a browser to one attempt for the duration of an exam sitting.
 ///
 /// Candidates have no accounts, so this is not authentication: it is a capability

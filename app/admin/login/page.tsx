@@ -27,7 +27,7 @@ export default async function AdminLoginPage() {
             width={2825}
             height={685}
             priority
-            className="h-10 w-auto"
+            className="h-12 w-auto max-w-full object-contain"
           />
         </div>
 

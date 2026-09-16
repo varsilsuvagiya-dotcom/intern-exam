@@ -2,7 +2,7 @@
 
 import { useActionState, useRef, useState } from "react";
 
-import { AlertTriangle, FileSpreadsheet, Upload, X } from "lucide-react";
+import { AlertTriangle, Download, FileSpreadsheet, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -374,7 +374,7 @@ function ImportCandidatesForm({
                 disabled={!file || Boolean(clientError)}
                 loading={importing}
                 loadingLabel="Importing candidates…"
-                icon={<Upload aria-hidden="true" className="size-4" />}
+                icon={<Download aria-hidden="true" className="size-4" />}
               >
                 Import candidates
               </Button>

@@ -1,11 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import {
-  SECTION_BLUEPRINT,
-  TOTAL_MARKS,
-  sectionNameByOrdinal,
-} from "@/lib/exam-settings/exam-blueprint";
+import { SECTION_BLUEPRINT, sectionNameByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 import { buildWhere, sortOrder, type AttemptFilters } from "./query-attempts";
@@ -20,8 +16,6 @@ import { buildWhere, sortOrder, type AttemptFilters } from "./query-attempts";
 /// produced after the question bank is edited are identical.
 
 const OPTION_LABEL: Record<OptionKey, string> = { a: "A", b: "B", c: "C", d: "D" };
-
-export const MAX_TOTAL = TOTAL_MARKS.toFixed(2);
 
 /// Two decimals, always, straight from the Decimal's own string. A null score —
 /// an attempt that is unfinished or unscored — exports as an empty cell rather
@@ -129,7 +123,31 @@ export async function buildSummaryRows(
     },
   });
 
+  // Each attempt's own paper decides which section columns are non-empty and
+  // what its total is worth — never the current blueprint. Two attempts sat
+  // under different active sections legitimately have different maximums.
+  const shapesByAttempt = new Map<string, Map<number, number>>();
+
+  if (rows.length > 0) {
+    const groups = await prisma.attemptQuestion.groupBy({
+      by: ["attemptId", "section"],
+      // `scored` matches what scoring actually counted towards the maximum: an
+      // unscored question awards nothing and raises no ceiling, so including it
+      // here would export a max the candidate could never have reached.
+      where: { attemptId: { in: rows.map((row) => row.id) }, scored: true },
+      _sum: { marks: true },
+    });
+
+    for (const group of groups) {
+      const bySection = shapesByAttempt.get(group.attemptId) ?? new Map<number, number>();
+      bySection.set(group.section, Number(group._sum.marks ?? 0));
+      shapesByAttempt.set(group.attemptId, bySection);
+    }
+  }
+
   const sheetRows = rows.map((row) => {
+    const shape = shapesByAttempt.get(row.id) ?? new Map<number, number>();
+    const attemptMaxTotal = [...shape.values()].reduce((sum, value) => sum + value, 0).toFixed(2);
     const sectionValues: Record<number, { toString(): string } | null> = {
       1: row.section1Score,
       2: row.section2Score,
@@ -156,16 +174,25 @@ export async function buildSummaryRows(
       submitted_at: timestamp(row.submittedAt),
       scored_at: timestamp(row.scoredAt),
       total_score: isScored ? score(row.totalScore) : "",
-      max_score: MAX_TOTAL,
+      // Blank rather than 0.00 for an attempt with no drawn paper at all
+      // (should not occur for a finalized attempt, but a blank cell is a far
+      // smaller consequence than reporting a fabricated max of zero).
+      max_score: shape.size > 0 ? attemptMaxTotal : "",
     };
 
     for (const blueprint of SECTION_BLUEPRINT) {
-      record[`section_${blueprint.ordinal}_score`] = isScored
+      const hadSection = shape.has(blueprint.ordinal);
+      record[`section_${blueprint.ordinal}_score`] = isScored && hadSection
         ? score(sectionValues[blueprint.ordinal])
         : "";
-      record[`section_${blueprint.ordinal}_max`] = (
-        blueprint.questionCount * blueprint.marksPerQuestion
-      ).toFixed(2);
+      // The paper's own recorded marks for this section, not the blueprint's
+      // current count — a paper drawn under a different question count for
+      // this section (a since-changed blueprint, historically) still exports
+      // the max it was actually worth. Blank when this attempt's paper never
+      // drew from the section at all.
+      record[`section_${blueprint.ordinal}_max`] = hadSection
+        ? (shape.get(blueprint.ordinal) ?? 0).toFixed(2)
+        : "";
     }
 
     // Retired sections export whatever was stored for them, and nothing at all

@@ -1,9 +1,9 @@
 import {
   ClipboardList,
+  Download,
   FileQuestion,
   LayoutDashboard,
   Settings,
-  Upload,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -33,7 +33,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: FileQuestion,
         excludes: ["/admin/questions/import"],
       },
-      { href: "/admin/questions/import", label: "Import CSV", icon: Upload },
+      { href: "/admin/questions/import", label: "Import CSV", icon: Download },
     ],
   },
   {

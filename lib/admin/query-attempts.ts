@@ -1,7 +1,6 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import { TOTAL_MARKS } from "@/lib/exam-settings/exam-blueprint";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { AttemptStatus } from "@/lib/generated/prisma/enums";
 
@@ -11,8 +10,11 @@ import { parsePaging, readParam } from "./query-candidates";
 ///
 /// Scores are read from the columns scoring persisted. Nothing here recomputes a
 /// score, and nothing here writes: viewing an attempt must never change it.
-
-export const MAX_SCORE = TOTAL_MARKS.toFixed(2);
+///
+/// Each attempt's maximum is the sum of the marks on its own drawn paper, not
+/// a single blueprint constant — sections can be toggled on and off, so two
+/// attempts sat under different active sections legitimately have different
+/// maximums, and neither is wrong.
 
 const STATUS_VALUES: Record<string, AttemptStatus> = {
   in_progress: "in_progress",
@@ -171,11 +173,14 @@ export type AttemptListResult = {
   unknownCandidate: boolean;
 };
 
-function scoringOf(row: {
-  status: AttemptStatus;
-  scoredAt: Date | null;
-  totalScore: { toString(): string } | null;
-}): AttemptScoring {
+function scoringOf(
+  row: {
+    status: AttemptStatus;
+    scoredAt: Date | null;
+    totalScore: { toString(): string } | null;
+  },
+  maxScore: string,
+): AttemptScoring {
   if (row.status === "in_progress") {
     return { kind: "not-finalized" };
   }
@@ -188,7 +193,7 @@ function scoringOf(row: {
     return { kind: "pending" };
   }
 
-  return { kind: "scored", totalScore: Number(row.totalScore.toString()).toFixed(2), maxScore: MAX_SCORE };
+  return { kind: "scored", totalScore: Number(row.totalScore.toString()).toFixed(2), maxScore };
 }
 
 export async function listAttempts(filters: AttemptFilters): Promise<AttemptListResult> {
@@ -242,6 +247,23 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
     }),
   ]);
 
+  // Each attempt's max is the sum of the marks on its own drawn paper — one
+  // grouped aggregate for the whole page rather than a query per row.
+  const marksByAttempt =
+    rows.length === 0
+      ? new Map<string, string>()
+      : new Map(
+          (
+            await prisma.attemptQuestion.groupBy({
+              by: ["attemptId"],
+              // Same `scored` filter as scoring and the sheet export use, so
+              // this list's denominator matches the attempt detail page's.
+              where: { attemptId: { in: rows.map((row) => row.id) }, scored: true },
+              _sum: { marks: true },
+            })
+          ).map((group) => [group.attemptId, (group._sum.marks ?? 0).toString()]),
+        );
+
   return {
     attempts: rows.map((row) => ({
       id: row.id,
@@ -249,7 +271,7 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
       statusLabel: STATUS_LABELS[row.status],
       startedAt: row.startedAt,
       submittedAt: row.submittedAt,
-      scoring: scoringOf(row),
+      scoring: scoringOf(row, Number(marksByAttempt.get(row.id) ?? 0).toFixed(2)),
       candidateId: row.candidateId,
       candidateName: row.candidate.name,
       candidateEmail: row.candidate.email,

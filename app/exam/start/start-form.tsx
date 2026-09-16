@@ -155,9 +155,28 @@ export function StartForm({ className = "" }: { className?: string }) {
           </ExamNotice>
         ) : null}
 
-        {state.kind === "failed" ? (
-          <ExamNotice tone="danger" title="The examination could not be started">
-            Please tell your examination supervisor.
+        {/* Two genuinely different situations, so two messages. The candidate
+            is told which one they are in and what to do about it — but never
+            which section is short or by how many, because the bank's
+            composition is not an exam-taker's to see. The specifics stay in
+            the server log, where `describeFailure` already names them. */}
+        {state.kind === "failed" && state.reason === "not_ready" ? (
+          <ExamNotice tone="danger" title="This examination is not ready yet">
+            The question paper has not been fully set up, so it cannot be prepared for you. This is
+            not a problem with your details, and trying again will not help. Please tell your
+            examination supervisor now — an administrator needs to finish setting up the paper.
+          </ExamNotice>
+        ) : null}
+
+        {/* The fallback branch, not a second exact match: a reason added to
+            `FailureReason` without a notice here would otherwise leave a
+            candidate staring at a form that silently did nothing, mid-exam.
+            Retry-and-then-fetch-a-supervisor is the safe wording for an
+            unrecognised failure. */}
+        {state.kind === "failed" && state.reason !== "not_ready" ? (
+          <ExamNotice tone="danger" title="Something went wrong while starting your examination">
+            Your details were accepted, but the examination could not be prepared. Please press
+            Start examination again. If it fails a second time, tell your examination supervisor.
           </ExamNotice>
         ) : null}
 

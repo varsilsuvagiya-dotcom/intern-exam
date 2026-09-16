@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import Link from "next/link";
-import { CheckSquare, Download, Pencil, Plus, Upload } from "lucide-react";
+import { CheckSquare, Download, Pencil, Plus } from "lucide-react";
 
 import { Button, buttonClass } from "@/components/ui/button";
 
@@ -38,7 +38,7 @@ export function CandidateEditor({ children }: { children: ReactNode }) {
             type="button"
             variant="secondary"
             onClick={() => setImportOpen(true)}
-            icon={<Upload aria-hidden="true" className="size-4" />}
+            icon={<Download aria-hidden="true" className="size-4" />}
           >
             Import candidates
           </Button>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 
 import Link from "next/link";
-import { AlertTriangle, Check, FileSpreadsheet, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, FileSpreadsheet, Upload, X } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonClass } from "@/components/ui/button";
@@ -207,6 +207,122 @@ function ErrorList({ errors }: { errors: RowError[] }) {
   );
 }
 
+const PREVIEW_PAGE_SIZE = 50;
+
+/// The subset of a payload row the preview table displays. The payload carries
+/// the full parsed row; nothing here is trusted, and the confirm step
+/// re-validates every field server-side regardless of what was shown.
+type PreviewRow = {
+  id: string;
+  section: string;
+  topic: string;
+  question: string;
+  difficulty: string;
+  correct: string;
+  marks: string;
+};
+
+/// The full preview batch, paged client-side. Every row already round-tripped
+/// to the browser in `payload` for the confirm step — this only controls how
+/// much of it is in the DOM at once, so a large import stays scrollable
+/// without one giant unpaginated table.
+function PreviewTable({ payload }: { payload: string }) {
+  const [page, setPage] = useState(1);
+
+  // The batch is already in the browser as `payload` for the confirm step, so
+  // the preview reads it rather than a second copy of the same rows. Parsed
+  // once per payload, not once per page turn.
+  const rows = useMemo<PreviewRow[]>(() => {
+    try {
+      return JSON.parse(payload) as PreviewRow[];
+    } catch {
+      return [];
+    }
+  }, [payload]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PREVIEW_PAGE_SIZE));
+  const shown = useMemo(() => {
+    const start = (page - 1) * PREVIEW_PAGE_SIZE;
+    return rows.slice(start, start + PREVIEW_PAGE_SIZE);
+  }, [rows, page]);
+
+  const step =
+    "inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-ink transition-colors duration-[120ms] hover:bg-subtle disabled:cursor-not-allowed disabled:text-disabled disabled:hover:bg-surface";
+
+  return (
+    <>
+      <div className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-surface">
+        <table className="w-full border-collapse text-left text-sm" style={{ minWidth: "980px" }}>
+          <thead className="sticky top-0 z-10">
+            <tr>
+              <Th>ID</Th>
+              <Th>Section</Th>
+              <Th>Topic</Th>
+              <Th>Question</Th>
+              <Th>Difficulty</Th>
+              <Th>Correct</Th>
+              <Th align="right">Marks</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((row) => (
+              <Tr key={row.id}>
+                <Td className="font-mono text-xs whitespace-nowrap text-ink-secondary">{row.id}</Td>
+                <Td className="font-mono text-xs text-ink-secondary">{row.section}</Td>
+                <Td className="text-ink-secondary">{row.topic}</Td>
+                <Td>
+                  <span className="line-clamp-2 max-w-[360px] text-ink">{row.question}</span>
+                </Td>
+                <Td className="text-ink-secondary">{row.difficulty}</Td>
+                <Td className="text-ink-secondary uppercase">{row.correct}</Td>
+                <Td align="right" className="text-ink-secondary tabular">
+                  {row.marks}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 ? (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[13px] text-muted">
+            Showing {(page - 1) * PREVIEW_PAGE_SIZE + 1}–{(page - 1) * PREVIEW_PAGE_SIZE + shown.length} of{" "}
+            {rows.length} rows.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={step}
+              disabled={page === 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              <ChevronLeft aria-hidden="true" className="size-3.5" />
+              Previous
+            </button>
+            <span className="px-1 text-[13px] text-ink-secondary tabular">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              className={step}
+              disabled={page === totalPages}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Next
+              <ChevronRight aria-hidden="true" className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 text-[13px] text-muted">
+          {rows.length} row{rows.length === 1 ? "" : "s"}.
+        </p>
+      )}
+    </>
+  );
+}
+
 export function ImportForm() {
   const [preview, previewAction, previewing] = useActionState<ImportState, FormData>(
     previewImport,
@@ -377,52 +493,7 @@ export function ImportForm() {
           </div>
 
           <div className="mt-4">
-            {/* Kept scrollable in both directions with its own sticky header,
-                as before. The page itself never scrolls sideways. */}
-            <div className="max-h-[28rem] overflow-auto rounded-lg border border-line bg-surface">
-              <table
-                className="w-full border-collapse text-left text-sm"
-                style={{ minWidth: "980px" }}
-              >
-                <thead className="sticky top-0 z-10">
-                  <tr>
-                    <Th>ID</Th>
-                    <Th>Section</Th>
-                    <Th>Topic</Th>
-                    <Th>Question</Th>
-                    <Th>Difficulty</Th>
-                    <Th>Correct</Th>
-                    <Th align="right">Marks</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.rows.map((row) => (
-                    <Tr key={row.id}>
-                      <Td className="font-mono text-xs whitespace-nowrap text-ink-secondary">
-                        {row.id}
-                      </Td>
-                      <Td className="font-mono text-xs text-ink-secondary">{row.sectionCode}</Td>
-                      <Td className="text-ink-secondary">{row.topic}</Td>
-                      <Td>
-                        <span className="line-clamp-2 max-w-[360px] text-ink">{row.question}</span>
-                      </Td>
-                      <Td className="text-ink-secondary">{row.difficulty}</Td>
-                      <Td className="text-ink-secondary uppercase">{row.correct}</Td>
-                      <Td align="right" className="text-ink-secondary tabular">
-                        {row.marks}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {state.total > state.rows.length ? (
-              <p className="mt-2 text-[13px] text-muted">
-                Showing the first {state.rows.length} of {state.total} rows. All {state.total} will
-                be imported.
-              </p>
-            ) : null}
+            <PreviewTable payload={state.payload} />
           </div>
 
           <form action={confirmAction} className="mt-4 flex flex-wrap items-center gap-3">

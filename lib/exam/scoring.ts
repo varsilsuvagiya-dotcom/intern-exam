@@ -1,12 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/db";
-import {
-  SECTION_BLUEPRINT,
-  TOTAL_MARKS,
-  TOTAL_QUESTIONS,
-  sectionNameByOrdinal,
-} from "@/lib/exam-settings/exam-blueprint";
+import { sectionBlueprintByOrdinal, sectionNameByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
 
 /// Scoring for a finalized attempt.
@@ -81,12 +76,7 @@ export type ScoreResult =
   | { kind: "not-finalized" }
   /// The stored paper does not describe a valid exam. Nothing is written and
   /// the problems are reported rather than silently clamped away.
-  | { kind: "invalid-paper"; problems: string[] }
-  /// The stored paper does not match the active blueprint, because it was drawn
-  /// under an earlier exam structure. Its stored result stays exactly as it is:
-  /// re-scoring it against today's rules would produce a different, wrong
-  /// number for an exam the candidate already sat.
-  | { kind: "incompatible-blueprint"; expected: number; found: number };
+  | { kind: "invalid-paper"; problems: string[] };
 
 type ScoredRow = {
   attemptQuestionId: string;
@@ -98,6 +88,9 @@ type Computed = {
   rows: ScoredRow[];
   sections: SectionScore[];
   totalHundredths: number;
+  /// The marks this specific paper is worth — derived from the sections it
+  /// was actually drawn from, never from the blueprint's current totals.
+  maxHundredths: number;
   problems: string[];
 };
 
@@ -118,13 +111,29 @@ export function computeScore(
   const rows: ScoredRow[] = [];
   const sections: SectionScore[] = [];
 
-  if (questions.length !== TOTAL_QUESTIONS) {
-    problems.push(`expected ${TOTAL_QUESTIONS} questions, found ${questions.length}`);
-  }
+  // The blueprint sections this specific paper was drawn from, not whatever
+  // the blueprint says today. A section toggled off (or on) after this paper
+  // was drawn must never change what scoring expects of it — the paper's own
+  // ordinals are the only source of truth for its own shape.
+  //
+  // An ordinal with no blueprint entry at all (never defined, at any point) is
+  // a real data problem rather than a toggle: it is reported here and excluded
+  // from `drawnBlueprint`, so it contributes nothing to the totals below.
+  const presentOrdinals = [...new Set(questions.map((question) => question.section))].sort(
+    (a, b) => a - b,
+  );
+  const drawnBlueprint = presentOrdinals.flatMap((ordinal) => {
+    const entry = sectionBlueprintByOrdinal(ordinal);
+    if (!entry) {
+      problems.push(`question(s) in unknown section ${sectionNameByOrdinal(ordinal)}`);
+      return [];
+    }
+    return [entry];
+  });
 
   let totalHundredths = 0;
 
-  for (const blueprint of SECTION_BLUEPRINT) {
+  for (const blueprint of drawnBlueprint) {
     // A drawn paper records the ordinal, so the snapshot is matched on that.
     const inSection = questions.filter((question) => question.section === blueprint.ordinal);
 
@@ -203,18 +212,11 @@ export function computeScore(
     });
   }
 
-  // A question outside the blueprint would never be counted into any section,
-  // so its absence from the totals has to be caught here rather than ignored.
-  const known = new Set(SECTION_BLUEPRINT.map((entry) => entry.ordinal));
-  for (const question of questions) {
-    if (!known.has(question.section)) {
-      problems.push(
-        `question ${question.id} is in unknown section ${sectionNameByOrdinal(question.section)}`,
-      );
-    }
-  }
-
-  const maxHundredths = Math.round(TOTAL_MARKS * SCALE);
+  const totalMarks = drawnBlueprint.reduce(
+    (sum, entry) => sum + entry.questionCount * entry.marksPerQuestion,
+    0,
+  );
+  const maxHundredths = Math.round(totalMarks * SCALE);
 
   if (totalHundredths < 0 || totalHundredths > maxHundredths) {
     problems.push(
@@ -222,7 +224,7 @@ export function computeScore(
     );
   }
 
-  return { rows, sections, totalHundredths, problems };
+  return { rows, sections, totalHundredths, maxHundredths, problems };
 }
 
 /// Scores one finalized attempt and persists the result.
@@ -259,20 +261,11 @@ export async function scoreAttempt(attemptId: string): Promise<ScoreResult> {
     },
   });
 
-  // A paper drawn under an earlier exam structure is not re-scored. The active
-  // blueprint would count a different number of questions and would not
-  // recognise the removed section at all, so recomputing would overwrite a
-  // real result with a wrong one. The stored score stays exactly as it is and
-  // remains readable; only the recomputation is refused.
-  if (questions.length !== TOTAL_QUESTIONS) {
-    console.warn("Scoring skipped: the stored paper predates the active exam structure.", {
-      attemptId,
-      expected: TOTAL_QUESTIONS,
-      found: questions.length,
-    });
-    return { kind: "incompatible-blueprint", expected: TOTAL_QUESTIONS, found: questions.length };
-  }
-
+  // Nothing here compares the paper's size against today's blueprint or
+  // today's section toggles: `computeScore` validates a paper entirely against
+  // its own recorded sections, so a paper drawn under a different exam shape
+  // (more sections, fewer, a different mix) is scored correctly on its own
+  // terms rather than being compared to a blueprint state it never had.
   const computed = computeScore(questions);
 
   if (computed.problems.length > 0) {
@@ -286,8 +279,12 @@ export async function scoreAttempt(attemptId: string): Promise<ScoreResult> {
   }
 
   const alreadyScored = attempt.scoredAt !== null;
+  // `null`, not "0.00", for a section this paper never drew from. A fabricated
+  // zero is indistinguishable from a candidate who genuinely scored nothing in
+  // a section they did sit, and the export's retired-section branch already
+  // reads `null` as "this attempt never had this section".
   const sectionColumn = (section: number) =>
-    computed.sections.find((entry) => entry.section === section)?.score ?? "0.00";
+    computed.sections.find((entry) => entry.section === section)?.score ?? null;
 
   await prisma.$transaction(async (tx) => {
     // Re-read inside the transaction: an attempt cannot leave a terminal state,
@@ -345,7 +342,7 @@ export async function scoreAttempt(attemptId: string): Promise<ScoreResult> {
   return {
     kind: "scored",
     totalScore: fromHundredths(computed.totalHundredths),
-    maxScore: fromHundredths(Math.round(TOTAL_MARKS * SCALE)),
+    maxScore: fromHundredths(computed.maxHundredths),
     sections: computed.sections,
     alreadyScored,
   };

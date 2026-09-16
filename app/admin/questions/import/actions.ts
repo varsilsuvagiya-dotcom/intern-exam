@@ -10,18 +10,6 @@ import {
 import { countExisting, importQuestions } from "@/lib/question-bank/import-questions";
 import { verifyRows } from "@/lib/question-bank/verify-rows";
 
-export type PreviewRow = {
-  id: string;
-  /// Shown as the code the file used. Derived from the resolved section for
-  /// display only — the database stores the section number, not this string.
-  sectionCode: string;
-  topic: string;
-  question: string;
-  difficulty: string;
-  correct: string;
-  marks: string;
-};
-
 /// What one upload contained, per section, so an admin can see at a glance that
 /// a file held the sections they expected. Derived from the parsed rows for
 /// display; nothing here is persisted.
@@ -34,8 +22,11 @@ export type ImportState =
       stage: "preview";
       /// The validated batch, carried forward to the confirm step. Re-validated
       /// server-side before anything is written; nothing here is trusted.
+      ///
+      /// The preview table reads its rows from this same string rather than
+      /// from a second copy of the batch — sending both doubled the transfer
+      /// for every import, for one set of rows rendered 50 at a time.
       payload: string;
-      rows: PreviewRow[];
       sections: SectionCount[];
       /// Sheets that were read but are not question sheets. Reported so a
       /// skipped sheet is visible rather than silently absent.
@@ -46,8 +37,6 @@ export type ImportState =
       updated: number;
     }
   | { stage: "done"; total: number; created: number; updated: number };
-
-const PREVIEW_LIMIT = 200;
 
 function summarizeSections(rows: { section: string }[]): SectionCount[] {
   const counts = new Map<string, number>();
@@ -90,15 +79,6 @@ export async function previewImport(
   return {
     stage: "preview",
     payload: JSON.stringify(parsed.rows),
-    rows: parsed.rows.slice(0, PREVIEW_LIMIT).map((row) => ({
-      id: row.id,
-      sectionCode: row.section,
-      topic: row.topic,
-      question: row.question,
-      difficulty: row.difficulty,
-      correct: row.correct,
-      marks: row.marks,
-    })),
     sections: summarizeSections(parsed.rows),
     skipped: parsed.skipped,
     fileCount: files.length,

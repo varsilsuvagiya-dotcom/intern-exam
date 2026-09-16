@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ClipboardList, Download, Upload } from "lucide-react";
+import { ClipboardList, Download } from "lucide-react";
 
 import { AttemptStatusBadge } from "@/components/admin/attempt-status-badge";
 import { ScoreCell } from "@/components/admin/score-cell";
@@ -224,7 +224,7 @@ export default async function AdminPage() {
         </h2>
         <div className="mt-3 flex flex-wrap gap-3">
           <Link href="/admin/questions/import" className={buttonClass("secondary")}>
-            <Upload aria-hidden="true" className="size-4" />
+            <Download aria-hidden="true" className="size-4" />
             Import CSV
           </Link>
           {/* A route handler that streams an Excel download, not a page. `Link`
