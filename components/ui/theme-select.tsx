@@ -144,7 +144,7 @@ export function ThemeSelect({
         onClick={() => setOpen((shown) => !shown)}
         onKeyDown={onKeyDown}
         className={[
-          "flex h-9 w-full min-w-[9rem] items-center justify-between gap-2 rounded-md border bg-surface px-3 text-left text-sm text-ink transition-colors duration-[120ms] hover:bg-subtle max-md:h-11",
+          "flex h-9 w-full min-w-[9rem] cursor-pointer items-center justify-between gap-2 rounded-md border bg-surface px-3 text-left text-sm text-ink transition-colors duration-[120ms] hover:bg-subtle max-md:h-11",
           invalid ? "border-danger" : "border-line-strong",
         ].join(" ")}
       >

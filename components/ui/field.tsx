@@ -45,7 +45,12 @@ export function Select({
     <select
       {...props}
       aria-invalid={invalid || undefined}
-      className={[CONTROL, "h-9", invalid ? INVALID : "", className].join(" ")}
+      className={[
+        CONTROL,
+        "h-9 cursor-pointer disabled:cursor-not-allowed",
+        invalid ? INVALID : "",
+        className,
+      ].join(" ")}
     >
       {children}
     </select>
