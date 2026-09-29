@@ -130,6 +130,7 @@ export type CandidateListItem = {
   /// here: this column only reports what the Selected Candidates import
   /// already decided, it never sets or changes selection itself.
   isSelected: boolean;
+  allowRetake: boolean;
   // --- Live-sheet application/profile fields (Phase 12), shown in the
   // expandable row detail rather than as table columns — see
   // app/admin/candidates/candidate-detail.tsx.
@@ -182,6 +183,7 @@ export async function listCandidates(filters: CandidateFilters): Promise<Candida
         mobile: true,
         registeredAt: true,
         updatedAt: true,
+        allowRetake: true,
         sourceTimestamp: true,
         currentCity: true,
         willingFullTimeSurat: true,

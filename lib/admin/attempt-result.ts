@@ -110,6 +110,8 @@ export type AttemptSummary = {
   /// synchronized from the Google Form.
   nameMismatch: boolean;
   emailMismatch: boolean;
+  attemptNumber: number;
+  candidateAttemptCount: number;
 };
 
 export type AttemptResult =
@@ -142,6 +144,8 @@ function summarize(
     candidate: { name: string; email: string; mobile: string };
   },
   durationMinutes: number,
+  attemptNumber: number,
+  candidateAttemptCount: number,
 ): AttemptSummary {
   return {
     id: attempt.id,
@@ -162,6 +166,8 @@ function summarize(
     emailMismatch:
       attempt.enteredEmail !== null &&
       attempt.enteredEmail.trim().toLowerCase() !== attempt.candidate.email.trim().toLowerCase(),
+    attemptNumber,
+    candidateAttemptCount,
   };
 }
 
@@ -312,6 +318,7 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
       section8Score: true,
       enteredName: true,
       enteredEmail: true,
+      candidateId: true,
       // Password hashes and sessions are never selected anywhere here.
       candidate: { select: { name: true, email: true, mobile: true } },
     },
@@ -321,12 +328,23 @@ export async function getAttemptResult(attemptId: string): Promise<AttemptResult
     return { kind: "not-found" };
   }
 
-  const settings = await prisma.examSetting.findUniqueOrThrow({
-    where: { id: "singleton" },
-    select: { durationMinutes: true },
-  });
+  const [settings, history] = await Promise.all([
+    prisma.examSetting.findUniqueOrThrow({
+      where: { id: "singleton" },
+      select: { durationMinutes: true },
+    }),
+    // Every attempt this candidate has, oldest first, to place this one among
+    // them — the same ordinal the attempts list computes per page.
+    prisma.attempt.findMany({
+      where: { candidateId: attempt.candidateId },
+      select: { id: true },
+      orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+    }),
+  ]);
 
-  const summary = summarize(attempt, settings.durationMinutes);
+  const attemptNumber = Math.max(1, history.findIndex((entry) => entry.id === attempt.id) + 1);
+
+  const summary = summarize(attempt, settings.durationMinutes, attemptNumber, history.length);
 
   // An active exam is monitored, not reviewed. Returning before any snapshot is
   // loaded means the answer key cannot reach the page even by accident.

@@ -90,6 +90,11 @@ function CandidatePanel({ summary }: { summary: AttemptSummary }) {
   );
 }
 
+const ORDINALS: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };
+function ordinalLabel(n: number): string {
+  return ORDINALS[n] ?? `${n}th`;
+}
+
 function AttemptPanel({ summary }: { summary: AttemptSummary }) {
   return (
     <Panel title="Attempt">
@@ -97,6 +102,18 @@ function AttemptPanel({ summary }: { summary: AttemptSummary }) {
         <DefRow label="Status">
           <AttemptStatusBadge status={summary.status} label={summary.statusLabel} />
         </DefRow>
+        {/* Only shown once this candidate has more than one attempt — same
+            rule as the attempts list badge. */}
+        {summary.candidateAttemptCount > 1 ? (
+          <DefRow label="Attempt number">
+            <span
+              className="inline-flex items-center rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs font-medium text-warning"
+              title={`Attempt ${summary.attemptNumber} of ${summary.candidateAttemptCount} for this candidate`}
+            >
+              {ordinalLabel(summary.attemptNumber)} attempt
+            </span>
+          </DefRow>
+        ) : null}
         <DefRow label="Started">
           <span className="tabular">{formatDate(summary.startedAt)}</span>
         </DefRow>

@@ -18,12 +18,13 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 
 import { CandidateRow } from "./candidate-detail";
 import { CandidateEditor, EditButton } from "./candidate-editor";
+import { RetakeToggle } from "./retake-toggle";
 import { SelectionToggle } from "./selection-toggle";
 
 /// Columns after the leading expand-toggle column, kept in one place so the
 /// detail row's `colSpan` (in candidate-detail.tsx) cannot drift out of sync
 /// with the header.
-const COLUMN_COUNT = 7;
+const COLUMN_COUNT = 8;
 
 export const metadata: Metadata = { title: "Candidates" };
 
@@ -138,7 +139,7 @@ export default async function CandidatesPage({
           />
         ) : (
           <>
-            <TableContainer label="Candidates table" minWidth={1220}>
+            <TableContainer label="Candidates table" minWidth={1320}>
               <thead>
                 <tr>
                   {/* The leading expand-toggle column has no header label of
@@ -152,6 +153,7 @@ export default async function CandidatesPage({
                   <Th>Registered</Th>
                   <Th>Updated</Th>
                   <Th align="right">Attempts</Th>
+                      <Th>Allow Retake</Th>
                   <Th align="right">Actions</Th>
                 </tr>
               </thead>
@@ -205,6 +207,13 @@ export default async function CandidatesPage({
                       >
                         {candidate.attemptCount}
                       </span>
+                    </Td>
+                    <Td>
+                      <RetakeToggle
+                        candidateId={candidate.id}
+                        candidateName={candidate.name}
+                        initialAllowed={candidate.allowRetake}
+                      />
                     </Td>
                     {/* Both row actions in one cell. Edit is secondary and
                         sits first, so the primary "View attempts" stays the

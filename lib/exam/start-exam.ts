@@ -191,7 +191,8 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
 
   // Checked immediately before the write, not at page render: an admin may have
   // closed the exam while the candidate sat on the form.
-  if (!(await getExamSettings()).isOpen) {
+  const examSettings = await getExamSettings();
+  if (!examSettings.isOpen) {
     return { kind: "closed" };
   }
 
@@ -217,7 +218,7 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
         { email: { equals: input.email, mode: "insensitive" as const } },
       ],
     },
-    select: { id: true },
+    select: { id: true, allowRetake: true },
     orderBy: { registeredAt: "asc" },
   });
 
@@ -261,11 +262,15 @@ export async function startOrResumeExam(form: FormData): Promise<StartOutcome> {
     return withPaper(existing.id, true, false);
   }
 
-  if (existing) {
-    // Anything that is not in progress is submitted or auto-submitted, and a
-    // candidate gets one exam.
+  if (existing && !candidate.allowRetake) {
+    // Anything that is not in progress is submitted, auto-submitted, or
+    // terminated. Normally that is the candidate's one exam. This candidate's
+    // own retake switch (set per-candidate on the admin's Candidates page)
+    // lifts the limit entirely for as long as it stays on — every start
+    // creates one more attempt, with no fixed count.
     return { kind: "completed" };
   }
+  // With the switch on, falls through to create another attempt below.
 
   try {
     // startedAt and status come from the schema defaults, so neither can be set

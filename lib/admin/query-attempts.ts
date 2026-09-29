@@ -159,6 +159,8 @@ export type AttemptListItem = {
   enteredName: string | null;
   enteredEmail: string | null;
   violationCount: number;
+  attemptNumber: number;
+  candidateAttemptCount: number;
 };
 
 export type AttemptListResult = {
@@ -264,6 +266,28 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
           ).map((group) => [group.attemptId, (group._sum.marks ?? 0).toString()]),
         );
 
+  // The ordinal has to be computed from every attempt the candidate has, not
+  // just this page's rows — a retake could sort far from its sibling under
+  // the current filters/sort. One query for every candidate on this page,
+  // not one per row.
+  const candidateIds = [...new Set(rows.map((row) => row.candidateId))];
+  const history =
+    candidateIds.length === 0
+      ? []
+      : await prisma.attempt.findMany({
+          where: { candidateId: { in: candidateIds } },
+          select: { id: true, candidateId: true, startedAt: true },
+          orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+        });
+
+  const ordinalByAttempt = new Map<string, number>();
+  const countByCandidate = new Map<string, number>();
+  for (const entry of history) {
+    const next = (countByCandidate.get(entry.candidateId) ?? 0) + 1;
+    countByCandidate.set(entry.candidateId, next);
+    ordinalByAttempt.set(entry.id, next);
+  }
+
   return {
     attempts: rows.map((row) => ({
       id: row.id,
@@ -279,6 +303,8 @@ export async function listAttempts(filters: AttemptFilters): Promise<AttemptList
       enteredName: row.enteredName,
       enteredEmail: row.enteredEmail,
       violationCount: row.violationCount,
+      attemptNumber: ordinalByAttempt.get(row.id) ?? 1,
+      candidateAttemptCount: countByCandidate.get(row.candidateId) ?? 1,
     })),
     total,
     page: filters.page,

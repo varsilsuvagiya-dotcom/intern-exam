@@ -22,6 +22,11 @@ function formatDate(value: Date | null): string {
   return value ? value.toISOString().slice(0, 16).replace("T", " ") : "—";
 }
 
+const ORDINALS: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };
+function ordinalLabel(n: number): string {
+  return ORDINALS[n] ?? `${n}th`;
+}
+
 export default async function AttemptsPage({
   searchParams,
 }: {
@@ -220,6 +225,17 @@ export default async function AttemptsPage({
                         the row, the email supports it. */}
                     <Td>
                       <span className="font-medium text-ink">{attempt.candidateName}</span>
+                      {/* Only shown once this candidate has more than one
+                          attempt — a lone attempt needs no ordinal, per the
+                          admin's ask to flag a retake, not every row. */}
+                      {attempt.candidateAttemptCount > 1 ? (
+                        <span
+                          className="ml-1.5 inline-flex items-center rounded-sm bg-warning-bg px-1.5 py-0.5 text-xs font-medium text-warning"
+                          title={`Attempt ${attempt.attemptNumber} of ${attempt.candidateAttemptCount} for this candidate`}
+                        >
+                          {ordinalLabel(attempt.attemptNumber)} attempt
+                        </span>
+                      ) : null}
                       <span className="block text-xs text-muted">{attempt.candidateEmail}</span>
                       {attempt.enteredName && attempt.enteredName !== attempt.candidateName ? (
                         <span

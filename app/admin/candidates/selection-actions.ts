@@ -126,3 +126,33 @@ export async function setCandidateSelection(
     return { ok: false, message: "Could not update this candidate's selection. Try again." };
   }
 }
+
+export type SetCandidateRetakeResult = { ok: true } | { ok: false; message: string };
+
+export async function setCandidateRetake(
+  candidateId: string,
+  allowRetake: boolean,
+): Promise<SetCandidateRetakeResult> {
+  await requireAdmin();
+
+  if (!candidateId) {
+    return { ok: false, message: "No candidate was specified." };
+  }
+
+  try {
+    await prisma.candidate.update({
+      where: { id: candidateId },
+      data: { allowRetake },
+    });
+
+    revalidatePath("/admin/candidates");
+    return { ok: true };
+  } catch (error) {
+    console.error("Candidate retake toggle failed.", {
+      candidateId,
+      allowRetake,
+      name: error instanceof Error ? error.name : "UnknownError",
+    });
+    return { ok: false, message: "Could not update this candidate's retake setting. Try again." };
+  }
+}
