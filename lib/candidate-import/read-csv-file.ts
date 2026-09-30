@@ -3,6 +3,8 @@ import "server-only";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
+import { applyDisplayTextToDateCells } from "@/lib/spreadsheet/date-cell-text";
+
 import { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_ROWS } from "./csv-contract";
 
 /// Turns an uploaded CSV or XLSX file into a raw header/row grid.
@@ -90,7 +92,14 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
       cellFormula: false,
       cellHTML: false,
       cellStyles: false,
-      cellDates: true,
+      
+      cellNF: true,
+      // Left off deliberately. Excel stores a date as a plain number, so a
+      // cell Excel guessed into a date format arrives here indistinguishable
+      // from one the author meant as a date. Typing it as a Date here would
+      // rewrite the author's own text; `applyDisplayTextToDateCells` uses the displayed text
+      // instead, which is what the author sees and meant.
+      cellDates: false,
     });
   } catch {
     return { ok: false, message: "The file could not be read as a spreadsheet." };
@@ -105,6 +114,8 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
   if (!worksheet) {
     return { ok: false, message: "Excel file contains no worksheets." };
   }
+
+  applyDisplayTextToDateCells(worksheet);
 
   const grid = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
     header: 1,

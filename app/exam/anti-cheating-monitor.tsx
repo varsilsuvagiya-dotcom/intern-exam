@@ -344,17 +344,20 @@ export function AntiCheatingMonitor({
   }, []);
 
   // Best-effort fullscreen entry at mount. Browsers require this to originate
-  // from a user gesture in many cases; a rejection is expected and silent —
-  // ExamShell's own start flow (Before You Begin) is the actual gesture this
-  // rides on when it works, and the exam is fully usable without fullscreen
-  // when it does not.
+  // synchronously from a user gesture, and by the time this component mounts
+  // — after the "Open examination" link navigates to a new page and the paper
+  // loads — that gesture has usually expired, so the browser silently refuses
+  // it. A refusal used to be swallowed here with nothing shown, which left the
+  // exam running outside fullscreen with no prompt to fix it. Now it falls
+  // through to the same "Resume fullscreen" dialog a mid-exam exit shows, so a
+  // candidate always gets one click that supplies a fresh gesture.
   useEffect(() => {
     if (reporting.current) return;
     reporting.current = true;
 
     const root = document.documentElement;
     if (root.requestFullscreen && !document.fullscreenElement) {
-      root.requestFullscreen().catch(() => {});
+      root.requestFullscreen().catch(() => setNeedsFullscreenResume(true));
     }
   }, []);
 

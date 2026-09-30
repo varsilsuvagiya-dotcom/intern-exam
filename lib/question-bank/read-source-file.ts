@@ -3,6 +3,8 @@ import "server-only";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
+import { applyDisplayTextToDateCells } from "@/lib/spreadsheet/date-cell-text";
+
 import { ACCEPTED_EXTENSIONS } from "./csv-contract";
 
 /// Turns an uploaded CSV, XLS or XLSX file into raw header/row text.
@@ -104,7 +106,8 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
       cellFormula: false,
       cellHTML: false,
       cellStyles: false,
-      cellDates: true,
+      cellNF: true,
+      cellDates: false,
     });
   } catch {
     return { ok: false, message: "The file could not be read as a spreadsheet." };
@@ -115,6 +118,8 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
   for (const name of workbook.SheetNames) {
     const worksheet = workbook.Sheets[name];
     if (!worksheet) continue;
+
+    applyDisplayTextToDateCells(worksheet);
 
     // `header: 1` gives the raw grid; `defval` keeps blank cells positional so
     // a row's values stay aligned with the header row above them.

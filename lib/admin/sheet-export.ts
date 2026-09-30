@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { SECTION_BLUEPRINT, sectionNameByOrdinal } from "@/lib/exam-settings/exam-blueprint";
 import type { OptionKey } from "@/lib/generated/prisma/enums";
+import { formatDateIST } from "@/lib/format-date";
 
 import { buildWhere, sortOrder, type AttemptFilters } from "./query-attempts";
 
@@ -24,8 +25,10 @@ function score(value: { toString(): string } | null | undefined): string {
   return value === null || value === undefined ? "" : Number(value.toString()).toFixed(2);
 }
 
+/// IST, matching every admin-panel screen — a UTC timestamp in the exported
+/// sheet next to IST timestamps in the app would read as a different exam.
 function timestamp(value: Date | null): string {
-  return value ? value.toISOString() : "";
+  return value ? formatDateIST(value) : "";
 }
 
 /// Neutralises spreadsheet formula injection.

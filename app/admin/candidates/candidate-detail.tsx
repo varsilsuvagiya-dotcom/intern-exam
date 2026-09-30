@@ -7,15 +7,16 @@ import { ChevronDown, ChevronRight, Code2, ExternalLink, FileText, Globe, Link a
 import { IconButton } from "@/components/ui/button";
 import { Td } from "@/components/ui/table";
 import type { CandidateListItem } from "@/lib/admin/query-candidates";
+import { formatDateIST, formatDateOnlyIST } from "@/lib/format-date";
 
 function formatDateTime(value: Date | null): string {
   if (!value) return "—";
-  return value.toISOString().slice(0, 16).replace("T", " ");
+  return formatDateIST(value);
 }
 
 function formatDateOnly(value: Date | null): string {
   if (!value) return "—";
-  return value.toISOString().slice(0, 10);
+  return formatDateOnlyIST(value);
 }
 
 /// Candidate-provided links often arrive without a protocol (the live sheet

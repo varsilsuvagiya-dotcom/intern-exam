@@ -13,13 +13,14 @@ import { Pagination } from "@/components/ui/pagination";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { PAGE_SIZES } from "@/lib/admin/query-candidates";
 import { SORT_LABELS, listAttempts, parseAttemptFilters } from "@/lib/admin/query-attempts";
+import { formatDateIST } from "@/lib/format-date";
 
 export const metadata: Metadata = { title: "Attempts" };
 
 export const dynamic = "force-dynamic";
 
 function formatDate(value: Date | null): string {
-  return value ? value.toISOString().slice(0, 16).replace("T", " ") : "—";
+  return value ? formatDateIST(value) : "—";
 }
 
 const ORDINALS: Record<number, string> = { 1: "1st", 2: "2nd", 3: "3rd" };

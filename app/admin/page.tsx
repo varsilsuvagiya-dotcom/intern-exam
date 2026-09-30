@@ -13,6 +13,7 @@ import { DEFAULT_SORT, listAttempts } from "@/lib/admin/query-attempts";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { getExamSettings } from "@/lib/exam-settings";
 import { countPendingScoring } from "@/lib/exam/pending-scoring";
+import { formatDateIST } from "@/lib/format-date";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
 const RECENT_LIMIT = 5;
 
 function formatDate(value: Date | null): string {
-  return value ? value.toISOString().slice(0, 16).replace("T", " ") : "—";
+  return value ? formatDateIST(value) : "—";
 }
 
 /// One labelled fact from the exam configuration.

@@ -15,6 +15,7 @@ import {
   type SelectionFilter,
 } from "@/lib/admin/query-candidates";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { formatDateIST } from "@/lib/format-date";
 
 import { CandidateRow } from "./candidate-detail";
 import { CandidateEditor, EditButton } from "./candidate-editor";
@@ -31,9 +32,7 @@ export const metadata: Metadata = { title: "Candidates" };
 /// Filters live in the URL, so this must not be cached as a static page.
 export const dynamic = "force-dynamic";
 
-function formatDate(value: Date): string {
-  return value.toISOString().slice(0, 16).replace("T", " ");
-}
+const formatDate = formatDateIST;
 
 const SELECTION_LABELS: Record<SelectionFilter, string> = {
   all: "All",

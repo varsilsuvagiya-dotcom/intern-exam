@@ -15,6 +15,7 @@ import {
 } from "@/lib/admin/attempt-result";
 import { getViolationSummary } from "@/lib/admin/attempt-violations";
 import { requireAdmin } from "@/lib/auth/require-admin";
+import { formatDateIST } from "@/lib/format-date";
 
 import { fetchAttemptViolations } from "./actions";
 import { QuestionReviewCard } from "./question-review-card";
@@ -25,7 +26,7 @@ export const metadata: Metadata = { title: "Attempt result" };
 export const dynamic = "force-dynamic";
 
 function formatDate(value: Date | null): string {
-  return value ? value.toISOString().slice(0, 16).replace("T", " ") : "—";
+  return value ? formatDateIST(value) : "—";
 }
 
 /// A bordered content block. Used sparingly: the page has four of them, not one

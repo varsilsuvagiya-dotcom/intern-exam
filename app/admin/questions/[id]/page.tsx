@@ -10,14 +10,13 @@ import { Chip } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { prisma } from "@/lib/db";
 import { LESSON_SECTION, SECTION_BLUEPRINT } from "@/lib/exam-settings/exam-blueprint";
+import { formatDateOnlyIST } from "@/lib/format-date";
 
 import { QuestionEditor } from "./question-editor";
 
 export const metadata: Metadata = { title: "Edit question" };
 
-function formatDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
+const formatDate = formatDateOnlyIST;
 
 export default async function QuestionDetailPage({
   params,

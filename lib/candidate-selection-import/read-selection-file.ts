@@ -3,6 +3,8 @@ import "server-only";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
+import { applyDisplayTextToDateCells } from "@/lib/spreadsheet/date-cell-text";
+
 import { ACCEPTED_EXTENSIONS, MAX_FILE_SIZE_BYTES, MAX_ROWS } from "./selection-contract";
 
 /// Reads an uploaded CSV or XLSX selected-candidate file into a raw
@@ -86,7 +88,8 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
       cellFormula: false,
       cellHTML: false,
       cellStyles: false,
-      cellDates: true,
+      cellNF: true,
+      cellDates: false,
     });
   } catch {
     return { ok: false, message: "The file could not be read as a spreadsheet." };
@@ -101,6 +104,8 @@ function readWorkbook(buffer: ArrayBuffer): ReadResult {
   if (!worksheet) {
     return { ok: false, message: "Excel file contains no worksheets." };
   }
+
+  applyDisplayTextToDateCells(worksheet);
 
   const grid = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
     header: 1,

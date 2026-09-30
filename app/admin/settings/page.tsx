@@ -6,6 +6,7 @@ import { TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { examBlueprintSummary, getExamSettings } from "@/lib/exam-settings";
 import { starvedSections } from "@/lib/exam-settings/exam-blueprint";
+import { formatDateIST } from "@/lib/format-date";
 
 import { SectionToggle } from "./section-toggle";
 import { SettingsForm } from "./settings-form";
@@ -15,10 +16,6 @@ export const metadata: Metadata = { title: "Exam settings" };
 /// Filters and the open/closed state gate candidate access, so this page is
 /// never served from a cached render.
 export const dynamic = "force-dynamic";
-
-function formatDate(value: Date): string {
-  return value.toISOString().slice(0, 16).replace("T", " ");
-}
 
 export default async function ExamSettingsPage() {
   await requireAdmin();
@@ -37,7 +34,7 @@ export default async function ExamSettingsPage() {
 
       {/* Read-only metadata: stated as text, never as a control. */}
       <p className="mb-6 text-[13px] text-muted">
-        Last updated <span className="tabular">{formatDate(settings.updatedAt)}</span>
+        Last updated <span className="tabular">{formatDateIST(settings.updatedAt)}</span>
       </p>
 
       <SettingsForm
