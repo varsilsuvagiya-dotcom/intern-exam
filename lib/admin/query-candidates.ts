@@ -157,23 +157,18 @@ export type CandidateListItem = {
 };
 
 export type CandidateListResult = {
+  /// Every matching candidate; the page slices them in the browser.
   candidates: CandidateListItem[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 };
 
 export async function listCandidates(filters: CandidateFilters): Promise<CandidateListResult> {
   const where = buildWhere(filters);
 
-  const [total, rows] = await Promise.all([
-    prisma.candidate.count({ where }),
-    prisma.candidate.findMany({
+  // ponytail: whole filtered set loaded for client paging; restore skip/take if candidates reach the thousands.
+  const rows = await prisma.candidate.findMany({
       where,
       orderBy: [{ registeredAt: "desc" }, { id: "asc" }],
-      skip: (filters.page - 1) * filters.pageSize,
-      take: filters.pageSize,
       // `_count` is a join aggregate in the same statement, so the attempt
       // counts cost one query for the page rather than one query per row.
       select: {
@@ -214,8 +209,7 @@ export async function listCandidates(filters: CandidateFilters): Promise<Candida
           take: 1,
         },
       },
-    }),
-  ]);
+    });
 
   return {
     candidates: rows.map(({ _count, candidateExams, ...row }) => ({
@@ -223,10 +217,7 @@ export async function listCandidates(filters: CandidateFilters): Promise<Candida
       attemptCount: _count.attempts,
       isSelected: candidateExams.length > 0,
     })),
-    total,
-    page: filters.page,
-    pageSize: filters.pageSize,
-    totalPages: Math.max(1, Math.ceil(total / filters.pageSize)),
+    total: rows.length,
   };
 }
 

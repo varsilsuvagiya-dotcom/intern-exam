@@ -47,7 +47,8 @@ export function FilterBar({
       }
     }
     const search = query.toString();
-    router.push(search ? `${pathname}?${search}` : pathname);
+    // Stay where the admin is: a filter change should not jump to the top.
+    router.push(search ? `${pathname}?${search}` : pathname, { scroll: false });
   }
 
   return (
@@ -67,6 +68,7 @@ export function FilterBar({
           </Button>
           <Link
             href={resetHref}
+            scroll={false}
             className={buttonClass("secondary")}
           >
             Reset

@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ClipboardList, Users } from "lucide-react";
 
-import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
+import {
+  FilterBar,
+  SearchField,
+  SelectField,
+} from "@/components/admin/filter-bar";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { buttonClass } from "@/components/ui/button";
-import { Pagination } from "@/components/ui/pagination";
-import { EmptyState, TableContainer, Td, Th } from "@/components/ui/table";
+import { ClientPager } from "@/components/ui/client-pager";
+import { EmptyState, Td, Th } from "@/components/ui/table";
 import {
   PAGE_SIZES,
   SELECTION_FILTERS,
@@ -50,20 +54,6 @@ export default async function CandidatesPage({
   const filters = parseCandidateFilters(await searchParams);
   const result = await listCandidates(filters);
 
-  // Unchanged from the previous implementation: same parameter names (`q`,
-  // `pageSize`, `page`), same omission rules, same defaults.
-  const pageLink = (page: number): string => {
-    const query = new URLSearchParams();
-    if (filters.search) query.set("q", filters.search);
-    if (filters.selection !== "all") query.set("selected", filters.selection);
-    if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
-    query.set("page", String(page));
-    return `/admin/candidates?${query}`;
-  };
-
-  const first = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
-  const last = Math.min(result.page * result.pageSize, result.total);
-
   return (
     <PageBody>
       <PageHeader
@@ -73,10 +63,7 @@ export default async function CandidatesPage({
         // response id alone, so a re-sync still updates the same row.
         description="Registrations synchronized from the Google Form, plus any added manually."
         actions={
-          <Link
-            href="/admin/attempts"
-            className={buttonClass("secondary")}
-          >
+          <Link href="/admin/attempts" className={buttonClass("secondary")}>
             <ClipboardList aria-hidden="true" className="size-4" />
             Attempts
           </Link>
@@ -88,165 +75,181 @@ export default async function CandidatesPage({
           table stays server-rendered: it is passed through as children, and
           only the per-row Edit control is a client component. */}
       <CandidateEditor>
-      <FilterBar resetHref="/admin/candidates">
-        <SearchField
-          id="candidates-search"
-          name="q"
-          label="Search"
-          defaultValue={filters.search}
-          // Matches the query layer's SEARCHABLE_FIELDS: identity plus every
-          // profile field (city, education, technologies, links, long-form
-          // answers). Kept short here rather than naming all ~20 fields.
-          placeholder="Name, email, mobile, city, college…"
-        />
-        <SelectField
-          id="candidates-selection"
-          name="selected"
-          label="Selection"
-          value={filters.selection}
-          options={SELECTION_FILTERS.map((value) => [value, SELECTION_LABELS[value]] as [string, string])}
-        />
-        <SelectField
-          id="candidates-page-size"
-          name="pageSize"
-          label="Per page"
-          value={String(filters.pageSize)}
-          options={PAGE_SIZES.map((size) => [String(size), String(size)] as [string, string])}
-        />
-      </FilterBar>
-
-      <div className="mt-6">
-        {result.total === 0 ? (
-          <EmptyState
-            icon={<Users aria-hidden="true" className="size-6" />}
-            title={filters.search ? "No candidates match your search" : "No candidates yet"}
-            body={
-              filters.search
-                ? "Try a different search term."
-                : "Candidates appear here once the Google Form sync runs, or you can add one above."
-            }
-            action={
-              filters.search ? (
-                <Link
-                  href="/admin/candidates"
-                  className={buttonClass("secondary")}
-                >
-                  Reset search
-                </Link>
-              ) : null
-            }
+        <FilterBar resetHref="/admin/candidates">
+          <SearchField
+            id="candidates-search"
+            name="q"
+            label="Search"
+            defaultValue={filters.search}
+            // Matches the query layer's SEARCHABLE_FIELDS: identity plus every
+            // profile field (city, education, technologies, links, long-form
+            // answers). Kept short here rather than naming all ~20 fields.
+            placeholder="Name, email, mobile, city, college…"
           />
-        ) : (
-          <>
-            <TableContainer label="Candidates table" minWidth={1320}>
-              <thead>
-                <tr>
-                  {/* The leading expand-toggle column has no header label of
-                      its own — it is a row affordance, not a data column. */}
-                  <Th aria-hidden="true">
-                    <span className="sr-only">Expand</span>
-                  </Th>
-                  <Th>Candidate</Th>
-                  <Th>Status</Th>
-                  <Th>Mobile</Th>
-                  <Th>Registered</Th>
-                  <Th>Updated</Th>
-                  <Th align="right">Attempts</Th>
-                      <Th>Allow Retake</Th>
-                  <Th align="right">Actions</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.candidates.map((candidate) => (
-                  <CandidateRow key={candidate.id} candidate={candidate} columnCount={COLUMN_COUNT}>
-                    {/* Name and email form one identity cell: the name anchors
+          <SelectField
+            id="candidates-selection"
+            name="selected"
+            label="Selection"
+            value={filters.selection}
+            options={SELECTION_FILTERS.map(
+              (value) => [value, SELECTION_LABELS[value]] as [string, string],
+            )}
+          />
+          <SelectField
+            id="candidates-page-size"
+            name="pageSize"
+            label="Per page"
+            value={String(filters.pageSize)}
+            options={PAGE_SIZES.map(
+              (size) => [String(size), String(size)] as [string, string],
+            )}
+          />
+        </FilterBar>
+
+        <div className="mt-6">
+          {result.total === 0 ? (
+            <EmptyState
+              icon={<Users aria-hidden="true" className="size-6" />}
+              title={
+                filters.search
+                  ? "No candidates match your search"
+                  : "No candidates yet"
+              }
+              body={
+                filters.search
+                  ? "Try a different search term."
+                  : "Candidates appear here once the Google Form sync runs, or you can add one above."
+              }
+              action={
+                filters.search ? (
+                  <Link
+                    href="/admin/candidates"
+                    className={buttonClass("secondary")}
+                  >
+                    Reset search
+                  </Link>
+                ) : null
+              }
+            />
+          ) : (
+            <ClientPager
+              key={JSON.stringify(filters)}
+              rows={result.candidates.map((candidate) => (
+                <CandidateRow
+                  key={candidate.id}
+                  candidate={candidate}
+                  columnCount={COLUMN_COUNT}
+                >
+                  {/* Name and email form one identity cell: the name anchors
                         the row, the email supports it. This groups two columns
                         that previously carried equal weight. */}
-                    <Td>
-                      {/* Capped so one very long address cannot stretch the
+                  <Td>
+                    {/* Capped so one very long address cannot stretch the
                           identity column and push every later column away.
                           `break-all` keeps the overflow inside the cell. */}
-                      <div className="max-w-[360px]">
-                        <span className="font-medium text-ink">{candidate.name}</span>
-                        <span className="block text-xs break-all text-muted">{candidate.email}</span>
-                      </div>
-                    </Td>
-                    {/* A switch, not just a badge: an admin can select or
+                    <div className="max-w-[360px]">
+                      <span className="font-medium text-ink">
+                        {candidate.name}
+                      </span>
+                      <span className="block text-xs break-all text-muted">
+                        {candidate.email}
+                      </span>
+                    </div>
+                  </Td>
+                  {/* A switch, not just a badge: an admin can select or
                         deselect this candidate for the exam right here.
                         Reflects (and writes) the same CandidateExam
                         existence check the Selected Candidates import and
                         the Phase 17 eligibility gate both use — see
                         app/admin/candidates/selection-actions.ts. */}
-                    <Td>
-                      <SelectionToggle
-                        candidateId={candidate.id}
-                        candidateName={candidate.name}
-                        initialSelected={candidate.isSelected}
-                      />
-                    </Td>
-                    <Td className="text-ink-secondary tabular whitespace-nowrap">
-                      {candidate.mobile}
-                    </Td>
-                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
-                      {formatDate(candidate.registeredAt)}
-                    </Td>
-                    <Td className="text-[13px] text-muted tabular whitespace-nowrap">
-                      {formatDate(candidate.updatedAt)}
-                    </Td>
-                    {/* A count, not a status: the query provides no attempt
+                  <Td>
+                    <SelectionToggle
+                      candidateId={candidate.id}
+                      candidateName={candidate.name}
+                      initialSelected={candidate.isSelected}
+                    />
+                  </Td>
+                  <Td className="text-ink-secondary tabular whitespace-nowrap">
+                    {candidate.mobile}
+                  </Td>
+                  <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                    {formatDate(candidate.registeredAt)}
+                  </Td>
+                  <Td className="text-[13px] text-muted tabular whitespace-nowrap">
+                    {formatDate(candidate.updatedAt)}
+                  </Td>
+                  {/* A count, not a status: the query provides no attempt
                         state, so none is implied. Zero is muted so the rows
                         that have attempts stand out. */}
-                    <Td align="right">
-                      <span
-                        className={
-                          candidate.attemptCount === 0
-                            ? "tabular text-disabled"
-                            : "tabular font-medium text-ink"
-                        }
-                      >
-                        {candidate.attemptCount}
-                      </span>
-                    </Td>
-                    <Td>
-                      <RetakeToggle
-                        candidateId={candidate.id}
-                        candidateName={candidate.name}
-                        initialAllowed={candidate.allowRetake}
-                      />
-                    </Td>
-                    {/* Both row actions in one cell. Edit is secondary and
+                  <Td align="right">
+                    <span
+                      className={
+                        candidate.attemptCount === 0
+                          ? "tabular text-disabled"
+                          : "tabular font-medium text-ink"
+                      }
+                    >
+                      {candidate.attemptCount}
+                    </span>
+                  </Td>
+                  <Td>
+                    <RetakeToggle
+                      candidateId={candidate.id}
+                      candidateName={candidate.name}
+                      initialAllowed={candidate.allowRetake}
+                    />
+                  </Td>
+                  {/* Both row actions in one cell. Edit is secondary and
                         sits first, so the primary "View attempts" stays the
                         rightmost thing on the row as it was before. */}
-                    <Td align="right">
-                      <div className="flex items-center justify-end gap-2">
-                        <EditButton candidateId={candidate.id} candidateName={candidate.name} />
+                  <Td align="right">
+                    <div className="flex items-center justify-end gap-2">
+                      <EditButton
+                        candidateId={candidate.id}
+                        candidateName={candidate.name}
+                      />
 
-                        {/* `aria-label` rather than an `sr-only` span: an
+                      {/* `aria-label` rather than an `sr-only` span: an
                             absolutely-positioned span inside the scroll
                             container escapes it and pans the whole page. */}
-                        <Link
-                          href={`/admin/attempts?candidate=${encodeURIComponent(candidate.id)}`}
-                          aria-label={`View attempts for ${candidate.name}`}
-                          className={buttonClass("primary", "sm")}
-                        >
-                          View attempts
-                        </Link>
-                      </div>
-                    </Td>
-                  </CandidateRow>
-                ))}
-              </tbody>
-            </TableContainer>
-
-            <Pagination
-              page={result.page}
-              totalPages={result.totalPages}
-              hrefFor={pageLink}
-              summary={`Showing ${first}–${last} of ${result.total} candidate${result.total === 1 ? "" : "s"}`}
+                      <Link
+                        href={`/admin/attempts?candidate=${encodeURIComponent(candidate.id)}`}
+                        aria-label={`View attempts for ${candidate.name}`}
+                        className={buttonClass("primary", "sm")}
+                      >
+                        View attempts
+                      </Link>
+                    </div>
+                  </Td>
+                </CandidateRow>
+              ))}
+              initialPage={filters.page}
+              pageSize={filters.pageSize}
+              noun="candidate"
+              label="Candidates table"
+              minWidth={1320}
+              head={
+                <thead>
+                  <tr>
+                    {/* The leading expand-toggle column has no header label of
+                      its own — it is a row affordance, not a data column. */}
+                    <Th aria-hidden="true">
+                      <span className="sr-only">Expand</span>
+                    </Th>
+                    <Th>Candidate</Th>
+                    <Th>Status</Th>
+                    <Th>Mobile</Th>
+                    <Th>Registered</Th>
+                    <Th>Updated</Th>
+                    <Th align="right">Attempts</Th>
+                    <Th>Allow Retake</Th>
+                    <Th align="right">Actions</Th>
+                  </tr>
+                </thead>
+              }
             />
-          </>
-        )}
-      </div>
+          )}
+        </div>
       </CandidateEditor>
     </PageBody>
   );

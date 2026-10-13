@@ -5,7 +5,6 @@ import { Download, FileQuestion } from "lucide-react";
 import { FilterBar, SearchField, SelectField } from "@/components/admin/filter-bar";
 import { PageBody, PageHeader } from "@/components/layout/page-header";
 import { buttonClass } from "@/components/ui/button";
-import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { VALID_SECTIONS, sectionName } from "@/lib/exam-settings/exam-blueprint";
@@ -28,25 +27,6 @@ export default async function QuestionBankPage({
   const params = await searchParams;
   const filters = parseFilters(params);
   const [result, readiness] = await Promise.all([listQuestions(filters), getBankReadiness()]);
-
-  // Unchanged from the previous implementation: same parameter names, same
-  // omission rules, same defaults. Renaming any of these would break existing
-  // bookmarked views.
-  const pageLink = (page: number): string => {
-    const query = new URLSearchParams();
-    if (filters.search) query.set("search", filters.search);
-    if (filters.section !== null) query.set("section", String(filters.section));
-    if (filters.difficulty) query.set("difficulty", filters.difficulty);
-    if (filters.active !== null) query.set("active", filters.active ? "active" : "inactive");
-    if (filters.scored !== null) query.set("scored", filters.scored ? "scored" : "unscored");
-    if (filters.readiness !== null) query.set("readiness", filters.readiness);
-    if (filters.pageSize !== 10) query.set("pageSize", String(filters.pageSize));
-    query.set("page", String(page));
-    return `/admin/questions?${query}`;
-  };
-
-  const first = result.total === 0 ? 0 : (result.page - 1) * result.pageSize + 1;
-  const last = Math.min(result.page * result.pageSize, result.total);
 
   const filtered =
     Boolean(filters.search) ||
@@ -171,16 +151,14 @@ export default async function QuestionBankPage({
           />
         ) : (
           <>
-            <QuestionTable questions={result.questions} reasonLabels={NOT_READY_MESSAGE} />
-
-            {result.total > 0 ? (
-              <Pagination
-                page={result.page}
-                totalPages={result.totalPages}
-                hrefFor={pageLink}
-                summary={`Showing ${first}–${last} of ${result.total} question${result.total === 1 ? "" : "s"}`}
-              />
-            ) : null}
+            {/* Keyed by filters so a new result set starts at its requested page. */}
+            <QuestionTable
+              key={JSON.stringify(filters)}
+              questions={result.questions}
+              reasonLabels={NOT_READY_MESSAGE}
+              initialPage={filters.page}
+              pageSize={filters.pageSize}
+            />
           </>
         )}
       </div>

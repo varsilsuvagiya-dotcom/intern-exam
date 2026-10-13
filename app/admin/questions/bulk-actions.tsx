@@ -10,6 +10,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Chip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { EmptyState, TableContainer, Td, Th, Tr } from "@/components/ui/table";
 import { useActionToast } from "@/components/ui/toast";
 import type { QuestionListItem } from "@/lib/question-bank/query-questions";
@@ -65,13 +66,23 @@ function Result({ state }: { state: BulkState }) {
 }
 
 export function QuestionTable({
-  questions,
+  questions: allQuestions,
   reasonLabels,
+  initialPage,
+  pageSize,
 }: {
+  /// The whole filtered set; paged here so Next/Previous never hits the server.
   questions: QuestionListItem[];
+  initialPage: number;
+  pageSize: number;
   /// Reason code to sentence, resolved on the server so the mapping has one home.
   reasonLabels: Record<string, string>;
 }) {
+  const totalPages = Math.max(1, Math.ceil(allQuestions.length / pageSize));
+  const [page, setPage] = useState(initialPage);
+  const current = Math.min(page, totalPages);
+  const questions = allQuestions.slice((current - 1) * pageSize, current * pageSize);
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activateState, activate, activating] = useActionState(bulkActivate, IDLE);
   const [deactivateState, deactivate, deactivating] = useActionState(bulkDeactivate, IDLE);
@@ -262,6 +273,15 @@ export function QuestionTable({
           </TableContainer>
         )}
       </div>
+
+      {allQuestions.length > 0 ? (
+        <Pagination
+          page={current}
+          totalPages={totalPages}
+          onPage={setPage}
+          summary={`Showing ${(current - 1) * pageSize + 1}–${Math.min(current * pageSize, allQuestions.length)} of ${allQuestions.length} question${allQuestions.length === 1 ? "" : "s"}`}
+        />
+      ) : null}
     </>
   );
 }

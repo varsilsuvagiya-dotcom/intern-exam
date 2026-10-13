@@ -118,19 +118,17 @@ export type QuestionListItem = {
 };
 
 export type QuestionListResult = {
+  /// Every matching question. Paging happens in the browser so Next/Previous
+  /// never round-trips to the server.
   questions: QuestionListItem[];
   total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 };
 
 export async function listQuestions(filters: QuestionFilters): Promise<QuestionListResult> {
   const where = buildWhere(filters);
 
-  // Readiness is computed from row contents, so it cannot be pushed into SQL.
-  // When it is filtered on, the matching set is read in full and paged in
-  // memory; otherwise the database pages as before.
+  // Readiness is computed from row contents, so it cannot be pushed into SQL;
+  // it filters the full set in memory below.
   const select = {
     id: true,
     section: true,
@@ -185,40 +183,14 @@ export async function listQuestions(filters: QuestionFilters): Promise<QuestionL
     };
   };
 
-  if (filters.readiness !== null && !filters.search) {
-    const rows = await prisma.question.findMany({ where, orderBy, select });
-    const wantReady = filters.readiness === "ready-to-activate";
-    const matching = rows
-      .map(decorate)
-      .filter((row) => (row.notReadyReasons.length === 0) === wantReady);
+  const rows = (await prisma.question.findMany({ where, orderBy, select })).map(decorate);
+  // ponytail: whole filtered set sent to the client; move back to DB paging if the bank grows past a few thousand rows.
+  const questions =
+    filters.readiness !== null && !filters.search
+      ? rows.filter(
+          (row) => (row.notReadyReasons.length === 0) === (filters.readiness === "ready-to-activate"),
+        )
+      : rows;
 
-    const start = (filters.page - 1) * filters.pageSize;
-
-    return {
-      questions: matching.slice(start, start + filters.pageSize),
-      total: matching.length,
-      page: filters.page,
-      pageSize: filters.pageSize,
-      totalPages: Math.max(1, Math.ceil(matching.length / filters.pageSize)),
-    };
-  }
-
-  const [total, rows] = await Promise.all([
-    prisma.question.count({ where }),
-    prisma.question.findMany({
-      where,
-      orderBy,
-      skip: (filters.page - 1) * filters.pageSize,
-      take: filters.pageSize,
-      select,
-    }),
-  ]);
-
-  return {
-    questions: rows.map(decorate),
-    total,
-    page: filters.page,
-    pageSize: filters.pageSize,
-    totalPages: Math.max(1, Math.ceil(total / filters.pageSize)),
-  };
+  return { questions, total: questions.length };
 }
