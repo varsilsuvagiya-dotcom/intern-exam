@@ -1,9 +1,15 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 
 import { Button, buttonClass } from "@/components/ui/button";
@@ -33,11 +39,20 @@ export function FilterBar({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
+  const params = useSearchParams();
+  const currentSearch = params.toString();
+  // The search text typed but not yet applied; null until the admin types.
+  // Dropdowns submit on their own, so only this decides whether Apply shows.
+  const [typed, setTyped] = useState<{ name: string; value: string } | null>(
+    null,
+  );
+  const dirty =
+    typed !== null && typed.value !== (params.get(typed.name) ?? "");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function toQuery(form: HTMLFormElement) {
     const query = new URLSearchParams();
-    for (const [key, value] of new FormData(event.currentTarget)) {
+    for (const [key, value] of new FormData(form)) {
       // Empty fields (an unselected "All", a blank search box) would
       // otherwise serialize as `key=`, which is not how the page's own links
       // build a query: an absent param and an empty one both mean "no
@@ -46,9 +61,27 @@ export function FilterBar({
         query.append(key, value);
       }
     }
-    const search = query.toString();
+    return query.toString();
+  }
+
+  function recheck(event: FormEvent<HTMLFormElement>) {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type === "search") {
+      setTyped({ name: target.name, value: target.value });
+    }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const search = toQuery(event.currentTarget);
+    // Same filters as the page already shows: nothing to fetch.
+    if (search === currentSearch) return;
     // Stay where the admin is: a filter change should not jump to the top.
-    router.push(search ? `${pathname}?${search}` : pathname, { scroll: false });
+    startTransition(() => {
+      router.push(search ? `${pathname}?${search}` : pathname, {
+        scroll: false,
+      });
+    });
   }
 
   return (
@@ -56,6 +89,8 @@ export function FilterBar({
       onSubmit={handleSubmit}
       className="rounded-lg border border-line bg-surface p-4"
       role="search"
+      onInput={recheck}
+      data-pending={isPending || undefined}
     >
       {hidden}
 
@@ -63,11 +98,16 @@ export function FilterBar({
         {children}
 
         <div className="flex items-center gap-2 max-sm:w-full max-sm:*:flex-1">
-          <Button type="submit" variant="primary">
-            Apply
-          </Button>
+          {/* Shown only for an unapplied search (and while it loads): a
+              disabled button just invites clicks that do nothing. */}
+          {dirty && (
+            <Button type="submit" variant="primary" loading={isPending}>
+              Apply
+            </Button>
+          )}
           <Link
             href={resetHref}
+            onClick={() => setTyped(null)}
             scroll={false}
             className={buttonClass("secondary")}
           >
@@ -94,7 +134,10 @@ export function FilterField({
 }) {
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label htmlFor={htmlFor} className="text-xs font-medium text-ink-secondary">
+      <label
+        htmlFor={htmlFor}
+        className="text-xs font-medium text-ink-secondary"
+      >
         {label}
       </label>
       {children}
@@ -159,16 +202,30 @@ export function SelectField({
   options: [string, string][];
   className?: string;
 }) {
+  const wrapper = useRef<HTMLDivElement>(null);
   return (
     <FilterField label={label} htmlFor={id} className={className}>
-      {/* ThemeSelect tracks its own "chosen" state once the admin picks an
+      <div ref={wrapper} className="contents">
+        {/* ThemeSelect tracks its own "chosen" state once the admin picks an
           option, the same uncontrolled-like behavior SearchField's input
           has — so without a key tied to the value, "Reset" (a navigation to
           the same pathname with a different/absent query) would leave a
           previously-chosen option showing instead of the server's fresh
           `value`. Keying forces a remount whenever the value actually
           changes, e.g. after Reset. */}
-      <ThemeSelect key={value} id={id} name={name} value={value} options={options} />
+        <ThemeSelect
+          key={value}
+          id={id}
+          name={name}
+          value={value}
+          options={options}
+          // Dropdowns apply immediately. Submit after React commits the hidden
+          // <select>'s new value, or the form would send the old one.
+          onChange={() =>
+            setTimeout(() => wrapper.current?.closest("form")?.requestSubmit())
+          }
+        />
+      </div>
     </FilterField>
   );
 }
